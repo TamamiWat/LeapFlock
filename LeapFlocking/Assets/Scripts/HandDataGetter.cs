@@ -6,8 +6,8 @@ using Leap;
 public class HandDataGetter : MonoBehaviour
 {
     public LeapProvider provider;
-    public Vector3[] fingerPosition = new Vector3[5];
-    //public GameObject prefab;
+    private Vector3[] fingerPosition = new Vector3[5];
+    public GameObject prefab;
     public Vector3 offset = Vector3.zero;
     public Vector3 scale = Vector3.one;
     
@@ -45,11 +45,11 @@ public class HandDataGetter : MonoBehaviour
                     userPos += offset;
 
                     Debug.Log(userPos);
-                    // if (userPos.HasValue && prefab != null)
-                    // {
-                    //     // Instantiateでオブジェクトを生成
-                    //     Instantiate(prefab, userPos.Value, Quaternion.identity);
-                    // }
+                    if (userPos.HasValue && prefab != null)
+                    {
+                        // Instantiateでオブジェクトを生成
+                        Instantiate(prefab, userPos.Value, Quaternion.identity);
+                    }
                 }
             }
         }

@@ -5,9 +5,9 @@ public class Params : ScriptableObject
     //number of boids
     public int N = 1000;
     //setting about Boid flocking
-    public float cohesionForce = 0.008f;
-    public float separationForce = 0.4f;
-    public float alignmentForce = 0.06f;
+    public float cohesionWeight = 0.008f;
+    public float separationWeight = 0.4f;
+    public float alignmentWeight = 0.06f;
     public float cohesionDistance = 0.5f;
     public float separationDistance = 0.05f;
     public float alignmentDistance = 0.1f;
@@ -20,7 +20,7 @@ public class Params : ScriptableObject
     public float userWeight = 1f;
     public float userDistance = 3f;
 
-    //setting about boundary
+    //setting about boundary (wall)
     public int radialSegments = 24;   // u方向の分割数
     public int tubeSegments = 16;  // v方向の分割数
     public float radius = 1f;         // 大きな円の半径 (R)
