@@ -12,27 +12,27 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c81aff3b42a0e44fcbf5eea68bd8de5c, type: 3}
   m_Name: param1113
   m_EditorClassIdentifier: 
-  N: 1000
-  cohesionForce: 0.008
-  separationForce: 0.4
-  alignmentForce: 0.06
-  cohesionDistance: 0.5
-  separationDistance: 0.05
-  alignmentDistance: 0.1
+  N: 500
+  cohesionWeight: 2
+  separationWeight: 5
+  alignmentWeight: 2
+  cohesionDistance: 1
+  separationDistance: 2
+  alignmentDistance: 2
   cohesionAngle: 1.5707964
   separationAngle: 1.5707964
   alignmentAngle: 1.0471976
   initSpeed: 2
   minVelocity: 2
   maxVelocity: 5
-  userWeight: 3
-  userDistance: 5
+  userWeight: 2
+  userDistance: 4
   radialSegments: 24
   tubeSegments: 16
   radius: 5
   tubeRadius: 3
-  wallCenter: {x: 0, y: 0, z: 10}
-  wallScale: {x: 10, y: 12.5, z: 10}
+  wallCenter: {x: 0, y: 0, z: 12.5}
+  wallScale: {x: 10, y: 12.5, z: 15}
   wallWeight: 1
   wallDistance: 3
   rotationAngleX: 90
