@@ -32,5 +32,10 @@ public class Params : ScriptableObject
     public float rotationAngleX = 90f;
     public float rotationAngleY = 90f;
     public float rotationAngleZ = 0f;
+
+    public float circulationWeight = 2f;
+    public float tubeWeight = 3f;
+
+    public float　maxAcceleration = 2.0f;
     
 }

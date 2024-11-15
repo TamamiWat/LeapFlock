@@ -18,17 +18,17 @@ public class Boid : MonoBehaviour
 
     void Start()
     {
-        pos = param.wallCenter;
-        velocity = transform.forward * param.initSpeed;
+        pos = transform.position;
+        velocity = transform.up * param.initSpeed;
         leapmotion = GameObject.Find ("LeapMotionManager");
         user = leapmotion.GetComponent<HandDataGetter>();
     }
 
     void Update()
     {
-        //UpdateTorus();
         UpdateNeighbors();
-        UpdateWall();
+        UpdateTorus();
+        //UpdateWall();
         UpdateCohesion();
         UpdateSeparation();
         UpdateAlignment();
@@ -60,21 +60,7 @@ public class Boid : MonoBehaviour
         return Vector3.zero;
     }
 
-    void UpdateMove()
-    {
-        var dt = Time.deltaTime;
-
-        velocity += accel * dt;
-        var dir = velocity.normalized;
-        var speed = velocity.magnitude;
-        velocity = Mathf.Clamp(speed, param.minVelocity, param.maxVelocity) * dir;
-        pos += velocity * dt;
-
-        var rot = Quaternion.LookRotation(velocity);
-        transform.SetPositionAndRotation(pos, rot);
-
-        accel = Vector3.zero;
-    }
+    
 
     void UpdateTorus()
     {
@@ -89,28 +75,49 @@ public class Boid : MonoBehaviour
     }
 
     Vector3 CalcAccelWithinTorus(Vector3 pos, Vector3 torusCenter, float radius, float tubeRadius, Vector3 scale)
+{
+    // トーラスの回転を取得
+    Quaternion rotation = Quaternion.Euler(param.rotationAngleX, param.rotationAngleY, param.rotationAngleZ);
+
+    // グローバル座標からローカル空間での位置を取得（回転とスケールを考慮）
+    Vector3 localPos = Quaternion.Inverse(rotation) * (pos - torusCenter);
+    localPos = Vector3.Scale(localPos, new Vector3(1f / scale.x, 1f / scale.y, 1f / scale.z)); // スケールを反映
+
+    // トーラスリングの中心への距離を計算
+    float distanceFromCenterToRing = new Vector2(localPos.x, localPos.z).magnitude;
+
+    // トーラスリングの中心に向かうベクトル
+    Vector3 toRingCenter = new Vector3(localPos.x, 0, localPos.z).normalized;
+
+    // トーラスリング方向に沿った循環運動（ローカル空間）
+    Vector3 circulationDirection = Vector3.Cross(toRingCenter, Vector3.up).normalized;
+
+    // チューブ中心までの距離を計算
+    float tubeDistance = Vector3.Distance(localPos, toRingCenter * radius);
+
+    // 壁補正力の計算
+    Vector3 wallCorrectionForce = Vector3.zero;
+
+    if (tubeDistance > tubeRadius)
     {
-        // ローカル空間での位置を取得しスケールを適用
-        Vector3 localPos = Vector3.Scale(pos - torusCenter, scale);
-
-        // トーラスのリング中心への距離を計算
-        float distanceFromCenterToRing = new Vector2(localPos.x, localPos.z).magnitude;
-        float distanceToTubeCenter = Mathf.Abs(distanceFromCenterToRing - radius);
-
-        // トーラスのチューブ外に出た場合、内側へ戻す力を計算
-        if (distanceToTubeCenter > tubeRadius)
-        {
-            // チューブ中心方向のベクトル
-            Vector3 toRingCenter = new Vector3(localPos.x, 0, localPos.z).normalized * (radius - distanceFromCenterToRing);
-            Vector3 toTubeCenter = (localPos - toRingCenter).normalized * (tubeRadius - distanceToTubeCenter);
-
-            // チューブ中心に戻す力を適用
-            Vector3 force = (toRingCenter + toTubeCenter).normalized * param.wallWeight;
-            return force / Mathf.Max(1f, distanceToTubeCenter); // 安全に距離で割る
-        }
-
-        return Vector3.zero; // チューブ内に収まっている場合は加速なし
+        // チューブの外側に出た場合、内側に戻す力
+        Vector3 toTubeCenter = (toRingCenter * radius - localPos).normalized;
+        wallCorrectionForce = toTubeCenter * (tubeDistance - tubeRadius) * param.wallWeight;
     }
+    else if (tubeDistance < tubeRadius * 0.9f)
+    {
+        // チューブの内側に入りすぎた場合、外側に押し戻す力
+        Vector3 toTubeSurface = (localPos - toRingCenter * radius).normalized;
+        wallCorrectionForce = toTubeSurface * (tubeRadius * 0.9f - tubeDistance) * param.wallWeight;
+    }
+
+    // グローバル空間に戻す（回転とスケールを適用）
+    Vector3 globalCirculation = rotation * circulationDirection;
+    Vector3 globalWallCorrection = rotation * Vector3.Scale(wallCorrectionForce, scale);
+
+    // 合成された加速度を返す
+    return globalCirculation * param.circulationWeight + globalWallCorrection;
+}
 
     void UpdateUser()
     {
@@ -228,4 +235,21 @@ public class Boid : MonoBehaviour
         accel += (averageVelocity - velocity) * param.alignmentWeight;
         
     }
+
+    void UpdateMove()
+    {
+        var dt = Time.deltaTime;
+
+        velocity += accel * dt;
+        var dir = velocity.normalized;
+        var speed = velocity.magnitude;
+        velocity = Mathf.Clamp(speed, param.minVelocity, param.maxVelocity) * dir;
+        pos += velocity * dt;
+
+        var rot = Quaternion.LookRotation(velocity);
+        transform.SetPositionAndRotation(pos, rot);
+
+        accel = Vector3.zero;
+    }
+    
 }

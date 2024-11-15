@@ -14,6 +14,19 @@ public class Simulation : MonoBehaviour
         get { return boids_.AsReadOnly(); }
     }
 
+    void Update()
+    {
+        while (boids_.Count < param.N)
+        {
+            //AddBoid();
+            AddBoidOnTorus();
+        }
+        while (boids_.Count > param.N)
+        {
+            RemoveBoid();
+        }
+    }
+
     void AddBoid()
     {
         var go = Instantiate(boidObj, Random.insideUnitSphere, Random.rotation);
@@ -27,48 +40,58 @@ public class Simulation : MonoBehaviour
     void AddBoidOnTorus()
     {
         Vector3 torusCenter = param.wallCenter; // トーラスの中心位置
-        float radius = param.radius;   // トーラスの大きな半径
-        float tubeRadius = param.tubeRadius;     // チューブの半径
-        Vector3 scale = param.wallScale;        // トーラスのスケール
+        float radius = param.radius;           // トーラスの大きな半径
+        float tubeRadius = param.tubeRadius;   // トーラスのチューブ半径
+        Vector3 scale = param.wallScale;       // スケール
+        Quaternion rotation = Quaternion.Euler(param.rotationAngleX, param.rotationAngleY, param.rotationAngleZ); // トーラスの回転
 
-        // トーラス内のランダムな位置を生成
-        Vector3 randomPosition = GetRandomPositionInTorus(torusCenter, radius, tubeRadius, scale);
+        // 回転後のトーラス内のランダムな位置を取得
+        Vector3 randomPosition = GetRandomPositionInTorus(torusCenter, radius, tubeRadius, scale, rotation);
+
+        // ランダムな回転を設定
         Quaternion randomRotation = Random.rotation;
 
-        // ボイドを生成してトーラス内に配置
+        // ランダム位置と回転でオブジェクトを生成
         var go = Instantiate(boidObj, randomPosition, randomRotation);
         go.transform.SetParent(transform);
 
+        // ボイドのプロパティを設定
         var boid = go.GetComponent<Boid>();
         boid.simulation = this;
         boid.param = param;
+
+        // ボイドをリストに追加
         boids_.Add(boid);
     }
 
-    Vector3 GetRandomPositionInTorus(Vector3 center, float radius, float tubeRadius, Vector3 scale)
+    Vector3 GetRandomPositionInTorus(Vector3 center, float radius, float tubeRadius, Vector3 scale, Quaternion rotation)
     {
-        // ランダムな角度でリング上の位置を計算
+        // ランダムなリングの角度を生成 (0 ~ 360度)
         float theta = Random.Range(0, 2 * Mathf.PI);
+
+        // ランダムなリング上の位置を計算
         Vector3 ringPosition = new Vector3(
             Mathf.Cos(theta) * radius,
             0,
             Mathf.Sin(theta) * radius
         );
 
-        // ランダムな方向でチューブ内の位置を計算
+        // ランダムなチューブ内の角度を生成
         float phi = Random.Range(0, 2 * Mathf.PI);
+
+        // チューブ内のランダム位置を計算
         Vector3 tubeOffset = new Vector3(
             Mathf.Cos(phi) * tubeRadius,
             Mathf.Sin(phi) * tubeRadius,
             0
         );
 
-        // チューブ内の位置をリングの法線に沿って回転
-        Quaternion rotation = Quaternion.LookRotation(ringPosition.normalized, Vector3.up);
-        tubeOffset = rotation * tubeOffset;
+        // チューブ内の位置をリングの法線方向に回転
+        Quaternion ringRotation = Quaternion.LookRotation(ringPosition.normalized, Vector3.up);
+        tubeOffset = ringRotation * tubeOffset;
 
-        // スケールとトーラス中心位置を考慮して位置を返す
-        return center + Vector3.Scale(ringPosition + tubeOffset, scale);
+        // 最終的な位置を計算（回転とスケール適用）
+        return center + rotation * Vector3.Scale(ringPosition + tubeOffset, scale);
     }
 
     void RemoveBoid()
@@ -81,25 +104,12 @@ public class Simulation : MonoBehaviour
         boids_.RemoveAt(lastIndex);
     }
 
-    void Update()
-    {
-        while (boids_.Count < param.N)
-        {
-            AddBoid();
-            //AddBoidOnTorus();
-        }
-        while (boids_.Count > param.N)
-        {
-            RemoveBoid();
-        }
-    }
-
     void OnDrawGizmos()
     {
         if (!param) return;
         Gizmos.color = Color.cyan;
-        Gizmos.DrawWireCube(param.wallCenter, Vector3.Scale(Vector3.one, param.wallScale));
-        DrawTorus(Vector3.zero, param.radius, param.tubeRadius, 
+        // Gizmos.DrawWireCube(param.wallCenter, Vector3.Scale(Vector3.one, param.wallScale));
+        DrawTorus(param.wallCenter, param.radius, param.tubeRadius, 
                     param.radialSegments, param.tubeSegments, param.wallScale);
     }
 

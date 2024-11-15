@@ -7,6 +7,7 @@ public class UserPosSetter : MonoBehaviour
 
     public Material material;
     public GameObject leapmotion;
+    public float distanceThreshold = 10;
     private HandDataGetter user;
 
     void Start()
@@ -24,11 +25,21 @@ public class UserPosSetter : MonoBehaviour
 
     void UpdateUser()
     {
+        Vector3 myPos = transform.position;
         if(user.UserPos.HasValue)
         {
-            Vector3 position = user.UserPos.Value;
-            material.SetVector("_UserPosition", position);
-            material.SetInt("_OnUser", 1);
+            Vector3 userPosition = user.UserPos.Value;
+            float distance = Vector3.Distance(myPos, userPosition);
+            if(distance < distanceThreshold)
+            {
+                material.SetVector("_UserPosition", userPosition);
+                material.SetInt("_OnUser", 1);
+            }
+            else
+            {
+                material.SetInt("_OnUser", 0);
+            }
+            
         }
         else
         {

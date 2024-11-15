@@ -58,7 +58,7 @@ Shader "Custom/Core"
                 float distanceToUser = distance(worldPos, _UserPosition.xyz);
 
                 float influence = saturate(1.0 - distanceToUser / 5.0);
-                v.vertex.xyz += v.normal * influence * 0.5;
+                v.vertex.xyz += v.normal * influence * 0.1;
             }
              
 
