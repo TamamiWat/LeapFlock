@@ -7,8 +7,8 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: Core
-  m_Shader: {fileID: 4800000, guid: 6743ea929d2fe430d92b449b9ddbacbd, type: 3}
+  m_Name: wavingCylinder
+  m_Shader: {fileID: 4800000, guid: 1231e4e79092149be8c8f8b66188aca9, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
@@ -61,14 +61,13 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _Alpha: 1
-    - _Alpha2: 1
-    - _Amplitude: 10
+    - _Amplitude: 0.2
     - _BumpScale: 1
     - _Cutoff: 0.5
     - _DetailNormalMapScale: 1
     - _DstBlend: 0
-    - _Frequency: 2.26
+    - _FadeEnd: 2
+    - _FadeStart: 1
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
@@ -76,15 +75,14 @@ Material:
     - _Mode: 0
     - _OcclusionStrength: 1
     - _Parallax: 0.02
-    - _RimPower: 0.93
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
-    - _Speed: 0.264
     - _SrcBlend: 1
     - _UVSec: 0
+    - _WaveFrequency: 2
+    - _WaveSpeed: 1
     - _ZWrite: 1
     m_Colors:
-    - _Color: {r: 1, g: 0.4198113, b: 0.88966256, a: 1}
+    - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
-    - _RimColor: {r: 0.8797293, g: 0.6179246, b: 1, a: 1}
   m_BuildTextureStacks: []

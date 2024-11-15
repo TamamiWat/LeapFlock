@@ -44,12 +44,12 @@ public class HandDataGetter : MonoBehaviour
                     userPos = Vector3.Scale(userPos.Value, scale);
                     userPos += offset;
 
-                    Debug.Log(userPos);
-                    if (userPos.HasValue && prefab != null)
-                    {
-                        // Instantiateでオブジェクトを生成
-                        Instantiate(prefab, userPos.Value, Quaternion.identity);
-                    }
+                    // Debug.Log(userPos);
+                    // if (userPos.HasValue && prefab != null)
+                    // {
+                    //     // Instantiateでオブジェクトを生成
+                    //     Instantiate(prefab, userPos.Value, Quaternion.identity);
+                    // }
                 }
             }
         }

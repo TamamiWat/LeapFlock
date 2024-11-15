@@ -7,8 +7,8 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: Core
-  m_Shader: {fileID: 4800000, guid: 6743ea929d2fe430d92b449b9ddbacbd, type: 3}
+  m_Name: Boid
+  m_Shader: {fileID: 4800000, guid: d038f0f95a6224d7c8ce013c5a18dae4, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
@@ -44,7 +44,7 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _MainTex:
-        m_Texture: {fileID: 0}
+        m_Texture: {fileID: 2800000, guid: 9a81f1a59f171804e84fce76584bdcb7, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _MetallicGlossMap:
@@ -68,23 +68,31 @@ Material:
     - _Cutoff: 0.5
     - _DetailNormalMapScale: 1
     - _DstBlend: 0
-    - _Frequency: 2.26
+    - _Frequency: 5
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
+    - _Harmonics: 4.66
+    - _HarmonicsSpread: 1.357
     - _Metallic: 0
+    - _MinBrightness: 0.525
     - _Mode: 0
     - _OcclusionStrength: 1
+    - _Octaves: 2.8
     - _Parallax: 0.02
-    - _RimPower: 0.93
+    - _RimPower: 1.28
+    - _Scale: 2
+    - _SimplexBias: 1.251
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
-    - _Speed: 0.264
+    - _Speed: 0.22
     - _SrcBlend: 1
     - _UVSec: 0
     - _ZWrite: 1
     m_Colors:
-    - _Color: {r: 1, g: 0.4198113, b: 0.88966256, a: 1}
+    - _Color: {r: 0.25943398, g: 0.6112459, b: 1, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
-    - _RimColor: {r: 0.8797293, g: 0.6179246, b: 1, a: 1}
+    - _Offset: {r: -7.72, g: -0.98, b: 0.11372549, a: 0}
+    - _RimColor: {r: 0.6839622, g: 0.75523514, b: 1, a: 1}
+    - _Scale: {r: 1, g: 1, b: 1, a: 1}
   m_BuildTextureStacks: []

@@ -15,6 +15,14 @@ public class Boid : MonoBehaviour
     List<Boid> separationList = new List<Boid>();
     List<Boid> alignmentList = new List<Boid>();
 
+    // 色相の範囲を指定
+    [Range(0, 1)] public float hueMin = 0.0f;  // 色相の最小値
+    [Range(0, 1)] public float hueMax = 1.0f;  // 色相の最大値
+
+    // 彩度と明度を固定値または範囲で指定
+    [Range(0, 1)] public float saturation = 1.0f;  // 彩度（固定値）
+    [Range(0, 1)] public float brightness = 1.0f;  // 明度（固定値）
+
 
     void Start()
     {
@@ -22,6 +30,8 @@ public class Boid : MonoBehaviour
         velocity = transform.up * param.initSpeed;
         leapmotion = GameObject.Find ("LeapMotionManager");
         user = leapmotion.GetComponent<HandDataGetter>();
+        SetRandomColor();
+        
     }
 
     void Update()
@@ -35,6 +45,25 @@ public class Boid : MonoBehaviour
         UpdateUser();
         UpdateMove();
     }
+
+    void SetRandomColor()
+    {
+        // Renderer コンポーネントを取得
+        Renderer renderer = GetComponent<Renderer>();
+
+        // 色相を指定範囲でランダム生成
+        float hue = Random.Range(hueMin, hueMax);
+
+        // HSVからRGBに変換して色を生成
+        Color randomColor = Color.HSVToRGB(hue, saturation, brightness);
+
+        // マテリアルの色を変更
+        if (renderer != null && renderer.material != null)
+        {
+            renderer.material.color = randomColor;
+        }
+    }
+
 
     void UpdateWall()
     {

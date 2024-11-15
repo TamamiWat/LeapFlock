@@ -12,21 +12,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c81aff3b42a0e44fcbf5eea68bd8de5c, type: 3}
   m_Name: param1113
   m_EditorClassIdentifier: 
-  N: 500
-  cohesionWeight: 3
-  separationWeight: 2
-  alignmentWeight: 2
-  cohesionDistance: 3
-  separationDistance: 2
-  alignmentDistance: 2
+  N: 300
+  cohesionWeight: 1
+  separationWeight: 3
+  alignmentWeight: 0.5
+  cohesionDistance: 2
+  separationDistance: 1
+  alignmentDistance: 1
   cohesionAngle: 1.5707964
   separationAngle: 1.5707964
   alignmentAngle: 1.0471976
   initSpeed: 4
   minVelocity: 4
   maxVelocity: 7
-  userWeight: 2
-  userDistance: 4
+  userWeight: 3
+  userDistance: 15
   radialSegments: 24
   tubeSegments: 16
   radius: 2
@@ -39,5 +39,5 @@ MonoBehaviour:
   rotationAngleY: 90
   rotationAngleZ: 0
   circulationWeight: 1
-  tubeWeight: 2
+  tubeWeight: 5
   maxAcceleration: 2
