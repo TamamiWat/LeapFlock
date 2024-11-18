@@ -25,7 +25,7 @@ MonoBehaviour:
   initSpeed: 4
   minVelocity: 4
   maxVelocity: 7
-  userWeight: 3
+  userWeight: 5
   userDistance: 15
   radialSegments: 24
   tubeSegments: 16
@@ -38,6 +38,6 @@ MonoBehaviour:
   rotationAngleX: 90
   rotationAngleY: 90
   rotationAngleZ: 0
-  circulationWeight: 1
-  tubeWeight: 5
+  circulationWeight: 2
+  tubeWeight: 7
   maxAcceleration: 2
