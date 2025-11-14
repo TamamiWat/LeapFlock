@@ -104,14 +104,14 @@ public class Simulation : MonoBehaviour
         boids_.RemoveAt(lastIndex);
     }
 
-    void OnDrawGizmos()
-    {
-        if (!param) return;
-        Gizmos.color = Color.cyan;
-        // Gizmos.DrawWireCube(param.wallCenter, Vector3.Scale(Vector3.one, param.wallScale));
-        DrawTorus(param.wallCenter, param.radius, param.tubeRadius, 
-                    param.radialSegments, param.tubeSegments, param.wallScale);
-    }
+    // void OnDrawGizmos()
+    // {
+    //     if (!param) return;
+    //     Gizmos.color = Color.cyan;
+    //     // Gizmos.DrawWireCube(param.wallCenter, Vector3.Scale(Vector3.one, param.wallScale));
+    //     DrawTorus(param.wallCenter, param.radius, param.tubeRadius, 
+    //                 param.radialSegments, param.tubeSegments, param.wallScale);
+    // }
 
     void DrawTorus(Vector3 center, float radius, float tubeRadius, int segments, int tubeSegments, Vector3 scale)
     {

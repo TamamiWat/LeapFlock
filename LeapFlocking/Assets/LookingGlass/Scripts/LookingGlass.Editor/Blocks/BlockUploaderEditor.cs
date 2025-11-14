@@ -103,15 +103,19 @@ namespace LookingGlass.Blocks.Editor {
                     Color prevColor = GUI.color;
                     try {
                         GUI.color = QuiltCaptureEditor.BlueStartColor;
-                        if (hologram.isPublished) {
-                            if (GUILayout.Button("  View Block  ", GUILayout.ExpandWidth(false))) {
+                        if (GUILayout.Button("  View Block  ", GUILayout.ExpandWidth(false))) {
                                 Application.OpenURL(LookingGlassWebRequests.GetViewURL(LookingGlassUser.Username, hologram.id));
                             }
-                        } else {
-                            if (GUILayout.Button("  Edit Block  ", GUILayout.ExpandWidth(false))) {
-                                Application.OpenURL(LookingGlassWebRequests.GetEditURL(LookingGlassUser.Username, hologram.id));
-                            }
-                        }
+                        // TODO: Need to update Blocks endpoint to handle Hologram edit view
+                        // if (hologram.isPublished) {
+                        //     if (GUILayout.Button("  View Block  ", GUILayout.ExpandWidth(false))) {
+                        //         Application.OpenURL(LookingGlassWebRequests.GetViewURL(LookingGlassUser.Username, hologram.id));
+                        //     }
+                        // } else {
+                        //     if (GUILayout.Button("  Edit Block  ", GUILayout.ExpandWidth(false))) {
+                        //         Application.OpenURL(LookingGlassWebRequests.GetEditURL(LookingGlassUser.Username, hologram.id));
+                        //     }
+                        // }
                     } finally {
                         GUI.color = prevColor;
                     }
@@ -141,7 +145,7 @@ namespace LookingGlass.Blocks.Editor {
                         if (!Directory.Exists(folderPath))
                             folderPath = "/";
 
-                        string nextValue = EditorUtility.OpenFilePanel("Select Upload File", folderPath, "png;jpeg").Replace('\\', '/').Replace(Application.dataPath.Replace("Assets", "").Trim('/'), "");
+                        string nextValue = EditorUtility.OpenFilePanel("Select Upload File", folderPath, "png,jpeg").Replace('\\', '/').Replace(Application.dataPath.Replace("Assets", "").Trim('/'), "");
                         if (!string.IsNullOrEmpty(nextValue))
                             property.stringValue = nextValue.Trim('/');
                     }

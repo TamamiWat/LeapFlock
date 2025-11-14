@@ -9,7 +9,7 @@ public class Boid : MonoBehaviour
     public Vector3 pos { get; private set; }
     public Vector3 velocity { get; private set; }
     private GameObject leapmotion;
-    private HandDataGetter user;
+    [SerializeField] private HandDataGetter user;
     Vector3 accel = Vector3.zero;
     List<Boid> cohesionList = new List<Boid>();
     List<Boid> separationList = new List<Boid>();
@@ -28,7 +28,6 @@ public class Boid : MonoBehaviour
     {
         pos = transform.position;
         velocity = transform.up * param.initSpeed;
-        leapmotion = GameObject.Find ("LeapMotionManager");
         user = leapmotion.GetComponent<HandDataGetter>();
         SetRandomColor();
         

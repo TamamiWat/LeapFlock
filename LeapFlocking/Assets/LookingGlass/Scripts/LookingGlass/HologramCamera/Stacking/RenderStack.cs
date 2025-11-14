@@ -10,7 +10,20 @@ namespace LookingGlass {
     /// </summary>
     [Serializable]
     public class RenderStack : IEnumerable<RenderStep> {
-        [SerializeField] private List<RenderStep> steps = new List<RenderStep>();
+        [Tooltip("Sets the filter mode (Point, Bilinear, or Point & Lenticular AA) of the final quilt mix texture.")]
+        [SerializeField] internal QuiltFilterMode filterMode = QuiltFilterMode.PointVirtualPixelAA;
+        [Min(0)]
+        [SerializeField] internal float antiAliasingStrength = 1;
+
+        [Tooltip("Turns off aspect adjustment when set to true.\n\n" +
+            "- If aspect adjustments are used, each quilt tile that is copied will be stretched or squashed based on its source render aspect.\n" +
+            "- If bypassed, then quilt tile contents are copied with stretch to fit behavior into whatever texture rectangle they are drawn into.\n\n" +
+            "Note that aspect adjustment currently result a performance hit, due to Graphics.Blit(...), which is more expensive than when it's turned off (we use Graphics.DrawTexture(...) in that case instead, which is faster).\n\n" +
+            "Use aspect adjustment only when needed.")]
+        [SerializeField] internal bool bypassAspectAdjustment = true;
+
+        [Tooltip("The list of render commands to perform.")]
+        [SerializeField] internal List<RenderStep> steps = new List<RenderStep>();
 
         private RenderTexture quiltMix;
         private Material alphaBlendMaterial;
@@ -19,6 +32,25 @@ namespace LookingGlass {
 
         public event Action onQuiltChanged;
         public event Action onRendered;
+
+        public QuiltFilterMode FilterMode {
+            get { return filterMode; }
+            set {
+                filterMode = value;
+                if (quiltMix != null)
+                    quiltMix.filterMode = filterMode.GetUnityFilterMode();
+            }
+        }
+
+        public float AntiAliasingStrength {
+            get { return antiAliasingStrength; }
+            set { antiAliasingStrength = value; }
+        }
+
+        public bool BypassAspectAdjustment {
+            get { return bypassAspectAdjustment; }
+            set { bypassAspectAdjustment = value; }
+        }
 
         public int Count => steps.Count;
         public RenderStep this[int index] {
@@ -31,6 +63,12 @@ namespace LookingGlass {
             if (step == null)
                 throw new ArgumentNullException(nameof(step));
             steps.Add(step);
+        }
+
+        public void Insert(int index, RenderStep step) {
+            if (step == null)
+                throw new ArgumentNullException(nameof(step));
+            steps.Insert(index, step);
         }
 
         public bool Remove(RenderStep step) => steps.Remove(step);
@@ -48,13 +86,15 @@ namespace LookingGlass {
 
         private bool SetupQuiltIfNeeded(HologramCamera hologramCamera) {
             QuiltSettings quiltSettings = hologramCamera.QuiltSettings;
-            if (quiltMix == null || quiltMix.width != quiltSettings.quiltWidth || quiltMix.height != quiltSettings.quiltHeight) {
+            RenderTexture quilt = hologramCamera.QuiltTexture;
+            FilterMode unityFilterMode = filterMode.GetUnityFilterMode();
+            if (quiltMix == null || quiltMix.graphicsFormat != quilt.graphicsFormat || quiltMix.width != quiltSettings.quiltWidth || quiltMix.height != quiltSettings.quiltHeight) {
                 if (quiltMix != null)
                     quiltMix.Release();
-                RenderTexture quilt = hologramCamera.QuiltTexture;
-                quiltMix = new RenderTexture(quiltSettings.quiltWidth, quiltSettings.quiltHeight, 0, quilt.format);
+                quiltMix = new RenderTexture(quiltSettings.quiltWidth, quiltSettings.quiltHeight, 0, quilt.graphicsFormat);
                 quiltMix.name = "Quilt Mix (" + quiltSettings.quiltWidth + "x" + quiltSettings.quiltHeight + ")";
-                quiltMix.filterMode = FilterMode.Point;
+                quiltMix.filterMode = unityFilterMode;
+                QuiltMix.depthStencilFormat = UnityEngine.Experimental.Rendering.GraphicsFormat.D16_UNorm;
                 try {
                     onQuiltChanged?.Invoke();
                 } catch (Exception e) {
@@ -62,13 +102,15 @@ namespace LookingGlass {
                 }
                 return true;
             }
+            if (quiltMix != null && quiltMix.filterMode != unityFilterMode)
+                quiltMix.filterMode = unityFilterMode;
             return false;
         }
 
         public RenderTexture RenderToQuilt(HologramCamera hologramCamera) {
             try {
                 SetupQuiltIfNeeded(hologramCamera);
-                MultiViewRendering.Clear(quiltMix, CameraClearFlags.SolidColor, Color.clear);
+                MultiViewRendering.Clear(quiltMix, CameraClearFlags.SolidColor, new Color(0, 0, 0, 1));
 
                 if (steps.Count <= 0) {
                     if (defaultStep == null)
@@ -103,7 +145,7 @@ namespace LookingGlass {
 
                     if (hologramCamera.Preview2D) {
                         hologramCamera.RenderPreview2D(false, true);
-                        MultiViewRendering.CopyViewToAllQuiltTiles(hologramCameraRenderSettings, hologramCamera.Preview2DRT, mix);
+                        MultiViewRendering.CopyViewToAllQuiltTiles(hologramCameraRenderSettings, hologramCamera.Preview2DRT, mix, true);
                     } else {
                         hologramCamera.RenderQuiltLayer(false, false);
                         Graphics.Blit(hologramCamera.QuiltTexture, mix, alphaBlendMaterial);
@@ -120,7 +162,7 @@ namespace LookingGlass {
                         //TODO: Account for the quilt's renderAspect.
                         //Currently, setting it does nothing.
                         for (int v = 0; v < minViews; v++)
-                            MultiViewRendering.CopyViewBetweenQuilts(step.QuiltSettings, v, temp, hologramCameraRenderSettings, v, mix);
+                            MultiViewRendering.CopyViewBetweenQuilts(step.QuiltSettings, v, temp, hologramCameraRenderSettings, v, mix, bypassAspectAdjustment);
 
                         if (postProcessCamera != null && postProcessCamera.gameObject.activeInHierarchy) {
                             RenderTexture tempDepthTex = CreateTemporaryBlankDepthTexture();
@@ -139,7 +181,7 @@ namespace LookingGlass {
                             renderTex = RenderTexture.GetTemporary(texture.width, texture.height);
                             Graphics.Blit(texture, renderTex);
                         }
-                        MultiViewRendering.CopyViewToAllQuiltTiles(hologramCameraRenderSettings, renderTex, mix);
+                        MultiViewRendering.CopyViewToAllQuiltTiles(hologramCameraRenderSettings, renderTex, mix, true);
 
                         //TODO: Copy depth texture from camera's RenderTexture targetTexture, and use it for post-processing accurately instead of below with the blank depth texture:
                         //if (postProcessCamera != null && postProcessCamera.gameObject.activeInHierarchy) {

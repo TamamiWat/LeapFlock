@@ -3,10 +3,17 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEditor;
-using System.Threading.Tasks;
 
 namespace LookingGlass.Editor {
     public static class MenuItemUtil {
+#if HAS_NEWTONSOFT_JSON
+        [MenuItem("LookingGlass/lkg-settings.json/Reset", priority = 59)]
+        private static void ResetLKGSettings() {
+            string json = UnityNewtonsoftJSONSerializer.Serialize(LKGSettings.Default, true);
+            File.WriteAllText(LKGSettingsSystem.FileName, json);
+        }
+#endif
+
         [MenuItem("LookingGlass/Retry LKG Bridge Connection", validate = true)]
         private static bool ValidateRetryLKGBridgeConnection() {
             return !LKGDisplaySystem.IsLoading;

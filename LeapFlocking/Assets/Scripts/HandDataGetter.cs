@@ -16,12 +16,13 @@ public class HandDataGetter : MonoBehaviour
     {
         get { return userPos; }
     }
-    // private void Awake()
-    // {
-    //     // Vsync Count を 0にすることにより、FPS を固定できるようになる
-    //     QualitySettings.vSyncCount = 0;
-    //     Application.targetFrameRate = 60;
-    // }
+
+    private void Awake()
+    {
+        // Vsync Count を 0にすることにより、FPS を固定できるようになる
+        QualitySettings.vSyncCount = 0;
+        Application.targetFrameRate = 60;
+    }
 
     void Start()
     {
@@ -36,7 +37,7 @@ public class HandDataGetter : MonoBehaviour
             foreach (Hand hand in frame.Hands)
             {
 
-                if (hand.IsLeft || hand.IsRight) 
+                if (hand.IsLeft || hand.IsRight)
                 {
                     //人差し指のみ取得
                     Finger indexFinger = hand.Fingers[(int)Finger.FingerType.TYPE_INDEX];
@@ -52,10 +53,12 @@ public class HandDataGetter : MonoBehaviour
                     // }
                 }
             }
+            Debug.Log("User Position: " + userPos);
         }
         else
         {
             userPos = null;
+            Debug.Log("No hand detected");
         } 
     }
 }

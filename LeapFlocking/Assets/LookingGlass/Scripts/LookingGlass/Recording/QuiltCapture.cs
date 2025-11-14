@@ -15,7 +15,9 @@ using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.Assertions;
 using UnityEngine.Video;
+
 using FFmpegOut;
+
 using Hjg.Pngcs;
 using LookingGlass.Toolkit;
 
@@ -141,7 +143,9 @@ namespace LookingGlass {
         public void RemoveVideoPlayerFromSync(VideoPlayer videoPlayer, bool restoreOnRemove = true) => syncedCollection.RemoveVideoPlayer(videoPlayer, restoreOnRemove);
         public void RemoveVideoPlayersFromSync(IEnumerable<VideoPlayer> videoPlayers, bool restoreOnRemove = true) => syncedCollection.RemoveVideoPlayers(videoPlayers, restoreOnRemove);
 
+#if UNITY_EDITOR || !UNITY_IOS
         private FFmpegSession session;
+#endif
         private QuiltCaptureState state;
 
         internal bool overridesAreInEffect = false;
@@ -375,6 +379,7 @@ namespace LookingGlass {
         public QuiltCaptureState State {
             get { return state; }
             private set {
+#if UNITY_EDITOR || !UNITY_IOS
                 if (state == value)
                     return;
                 QuiltCaptureState prevState = state;
@@ -393,6 +398,9 @@ namespace LookingGlass {
                         break;
                 }
                 onStateChanged?.Invoke(state);
+#else
+                LogUnsupportedError();
+#endif
             }
         }
 
@@ -416,6 +424,7 @@ namespace LookingGlass {
             }
         }
 
+#if UNITY_EDITOR || !UNITY_IOS
         #region Unity Messages
         private void OnValidate() {
             CheckToLogClipLengthWarning();
@@ -626,8 +635,9 @@ namespace LookingGlass {
             hologramCamera.SetQuiltPreset(previousAutomaticQuiltPreset, previousPreset);
             hologramCamera.CameraProperties.NearClipFactor = previousNearClip;
         }
+#endif
 
-#region File Naming
+        #region File Naming
         public string GetDefaultPrefix(QuiltCaptureMode captureMode) => captureMode == QuiltCaptureMode.SingleFrame ? "Screenshot" : "Recording";
         public string GetDefaultFileName(QuiltCaptureMode captureMode) => GetDefaultPrefix(captureMode) + TakeVariablePattern;
         public bool IsDefaultFileName(string fileName) => DefaultFileNamePattern.Value.IsMatch(fileName);
@@ -654,9 +664,10 @@ namespace LookingGlass {
             string outputPath = Path.Combine(folderPath.GetFullPath(), fileName).Replace("\\", "/");
             return outputPath;
         }
-#endregion
+        #endregion
 
-#region Recording Methods
+        #region Recording Methods
+#if UNITY_EDITOR || !UNITY_IOS
         /// <summary>
         /// <para>Starts a recording session that will output a video file to a file at the default path.</para>
         /// <para>See also: <seealso cref="CalculateAutoCorrectPath"/></para>
@@ -1007,12 +1018,33 @@ namespace LookingGlass {
             StopRecording();
             tcs.SetResult(true);
         }
-#endregion
 
         private async Task AddPNGMetadataAfterScreenshot(Task screenshotTask, string pngFilePath) {
             await screenshotTask;
             await AddPNGMetadata(pngFilePath);
         }
+#else
+        public void StartRecording() => LogUnsupportedError();
+        public void StartRecording(string outputFilePath) => LogUnsupportedError();
+        public void PauseRecording() => LogUnsupportedError();
+        public void ResumeRecording() => LogUnsupportedError();
+        public void StopRecording() => LogUnsupportedError();
+
+        public async Task StartRecordingFrames(int startFrame, int endFrame) => LogUnsupportedError();
+        public async Task StartRecordingFrames(int startFrame, int endFrame, string outputFilePath) => LogUnsupportedError();
+        public async Task StartRecording(float startTime, float endTime) => LogUnsupportedError();
+        public async Task StartRecording(float startTime, float endTime, string outputFilePath) => LogUnsupportedError();
+        public ScreenshotProgress Screenshot2D(bool writePNGMetadata = true) { LogUnsupportedError(); return null; }
+        public ScreenshotProgress Screenshot3D(bool writePNGMetadata = true) { LogUnsupportedError(); return null; }
+        public ScreenshotProgress Screenshot3DLayer(bool writePNGMetadata = true) { LogUnsupportedError(); return null; }
+        public ScreenshotProgress Screenshot2D(string outputFilePath, bool writePNGMetadata = true) { LogUnsupportedError(); return null; }
+        public ScreenshotProgress Screenshot3D(string outputFilePath, bool writePNGMetadata = true) { LogUnsupportedError(); return null; }
+        public ScreenshotProgress Screenshot3DLayer(string outputFilePath, bool writePNGMetadata = true) { LogUnsupportedError(); return null; }
+
+        public void PauseRecordingInternal() => LogUnsupportedError();
+        public void ResumeRecordingInternal() => LogUnsupportedError();
+#endif
+        #endregion
 
         /// <summary>
         /// <para>Adds <see cref="QuiltCapture"/> metadata to the PNG file at the given <paramref name="pngFilePath"/>.</para>
@@ -1074,5 +1106,38 @@ namespace LookingGlass {
             }
 
         }
+
+#if !UNITY_EDITOR && UNITY_IOS
+        private float timeLastAttempted = float.NegativeInfinity;
+
+        private void LogUnsupportedError() {
+            timeLastAttempted = Time.time;
+            Debug.LogError("Recording is not supported in iOS builds.");
+        }
+
+        private void OnGUI() {
+            if (Time.time - timeLastAttempted < 5) {
+                string warningText = "Recording is not supported in iOS builds.";
+
+                // Define the style for the warning message
+                GUIStyle warningStyle = new GUIStyle(GUI.skin.label);
+                warningStyle.fontSize = 40;
+                warningStyle.fontStyle = FontStyle.Bold;
+                warningStyle.normal.textColor = Color.red;
+
+                // Calculate the size of the text
+                Vector2 textSize = warningStyle.CalcSize(new GUIContent(warningText));
+
+                // Calculate the position to center the warning message
+                float xPos = (Screen.width - textSize.x) / 2;
+                float yPos = (Screen.height - textSize.y) / 2;
+
+                // Display the warning message
+                GUI.Label(new Rect(xPos, yPos, textSize.x, textSize.y), warningText, warningStyle);
+            }
+        }
+#endif
+
     }
 }
+

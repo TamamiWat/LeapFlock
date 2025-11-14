@@ -38,7 +38,7 @@ namespace LookingGlass {
         private static MethodInfo removeCustomSize;
 
         public static readonly Lazy<Regex> SizeDisplayTextPattern = new Lazy<Regex>(() =>
-            new Regex("(?<label>[A-Za-z])*\\(?(?<width>[0-9]*)x(?<height>[0-9]*)\\)?"));
+            new Regex("(?<label>[A-Za-z]+)\\(?(?<width>[0-9]+)x(?<height>[0-9]+)\\)?"));
 
         public static readonly Lazy<Regex> CleanupDisplayTextPattern = new Lazy<Regex>(() =>
             new Regex("(^[0-9]*x[0-9]*$)|((?i)TEST(?-i))|(Looking Glass)"));
@@ -367,10 +367,29 @@ namespace LookingGlass {
                     yield return gameView;
         }
 
+        /// <summary>
+        /// Updates non-Preview Game Views in the Unity editor to match the resolution of the main <see cref="HologramCamera"/>.
+        /// </summary>
+        /// <remarks>
+        /// This is skipped (returns <c>false</c>) when any of the following are true:
+        /// <list type="bullet">
+        /// <item>The lkg-settings.json's <c>"skipUserGameViews"</c> field is set to <c>true</c>.</item>
+        /// <item>The iOS build target is selected, and there are 0 connected Looking Glass displays.</item>
+        /// </list>
+        /// </remarks>
+        /// <returns><c>true</c> on successfully updating all user game views, <c>false</c> otherwise or when skipped.</returns>
         public static bool UpdateUserGameViews() {
             HologramCamera main = HologramCamera.Instance;
             if (main == null)
                 return false;
+
+            if (LKGSettingsSystem.Settings.skipUserGameViews)
+                return false;
+
+#if UNITY_IOS
+            if (LKGDisplaySystem.LKGDisplayCount <= 0)
+                return false;
+#endif
 
             Calibration cal = main.Calibration;
             Vector2Int resolution = new Vector2Int(cal.screenW, cal.screenH);

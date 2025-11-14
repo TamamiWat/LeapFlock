@@ -1,6 +1,9 @@
 ﻿using System;
 using System.IO;
+using System.Text;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
+
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -70,7 +73,7 @@ namespace LookingGlass {
         /// </summary>
         internal static void EncodeToPNGBytes(RenderTexture source, out Texture2D cpuTexture, out byte[] bytes) {
             cpuTexture = ReadTextureToCPU(source);
-            bytes = cpuTexture.EncodeToPNG();
+            bytes = cpuTexture.EncodeToPNG(); //NOTE: PNG files are typically always encoded in Gamma space, regardless of what color space the Texture2D is in.
         }
 
         internal static Texture2D SaveAsPNGScreenshotAt(RenderTexture source, string filePath) {
@@ -84,7 +87,17 @@ namespace LookingGlass {
         }
 
         internal static Texture2D ReadTextureToCPU(RenderTexture source) {
-            Texture2D result = new Texture2D(source.width, source.height, TextureFormat.RGB24, false);
+            //NOTE: We need to make sure we're creating the Texture2D in the right color space and format, to match the RenderTexture since we're reading pixels directly:
+            //RenderTexture in R8G8B8A8_UNorm (Linear)  → Texture2D in RGBA32, bool linear = true
+            //RenderTexture in R8G8B8A8_SRGB (Gamma)    → Texture2D in RGBA32, bool linear = false
+            //  GraphicsFormats (left) have the "linear vs. gamma" property inherently tied into the enum.
+            //  TextureFormats (right) do NOT specify which color space it represents.
+
+            GraphicsFormat graphicsFormat = source.graphicsFormat;
+            bool isLinear = !GraphicsFormatUtility.IsSRGBFormat(graphicsFormat);
+            TextureFormat format = GraphicsFormatUtility.GetTextureFormat(graphicsFormat);
+
+            Texture2D result = new Texture2D(source.width, source.height, format, false, isLinear);
 
             try {
                 RenderTexture.active = source;
@@ -95,6 +108,26 @@ namespace LookingGlass {
             }
 
             return result;
+        }
+
+        private static StringBuilder sb = null;
+        public static string ToString(Matrix4x4 matrix, string indent = null) {
+            if (sb == null)
+                sb = new StringBuilder(256);
+            else
+                sb.Clear();
+
+            for (int r = 0; r < 4; r++) {
+                if (indent != null)
+                    sb.Append(indent);
+                for (int c = 0; c < 4; c++) {
+                    sb.Append(matrix[r, c].ToString("F8"));
+                    if (c < 3)
+                        sb.Append(' ');
+                }
+                sb.AppendLine();
+            }
+            return sb.ToString();
         }
     }
 }

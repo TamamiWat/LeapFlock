@@ -39,12 +39,14 @@ namespace LookingGlass {
         }
 
         private static async Task SaveSnapshotsInternal() {
+#if UNITY_EDITOR || !UNITY_IOS
             try {
                 Debug.Log("Saving hologram debugging snapshots...");
 
 #if HAS_NEWTONSOFT_JSON
                 UnityNewtonsoftJSONSerializer.SilentUnityFields = true;
 #endif
+
 
                 string folder = CombinePaths(Environment.CurrentDirectory, BaseFolder);
                 Directory.CreateDirectory(folder);
@@ -178,6 +180,9 @@ namespace LookingGlass {
                 UnityNewtonsoftJSONSerializer.SilentUnityFields = false;
 #endif
             }
+#else
+            Debug.LogWarning("Screenshots and recordings are not supported in iOS builds.");
+#endif
         }
 
         private static string ToJSON<T>(T obj) {

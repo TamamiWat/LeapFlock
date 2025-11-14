@@ -144,6 +144,8 @@ namespace LookingGlass {
         [ContextMenuItem("Reset To Current", nameof(ResetManualCalibrationToCurrent))]
 #endif
         [SerializeField] internal Calibration manualCalibration = default;
+
+        [SerializeField] internal Shader overrideLenticularShader = null;
         #endregion
 
 #if UNITY_EDITOR
@@ -152,11 +154,8 @@ namespace LookingGlass {
         /// </summary>
         internal void ResetManualCalibration() {
             manualCalibration = default;
-            if (manualCalibrationMode == ManualCalibrationMode.UseManualSettings)
-                manualCalibrationMode = ManualCalibrationMode.None;
+            manualCalibrationMode = ManualCalibrationMode.None;
             UpdateCalibration();
-            GameViewExtensions.UpdateUserGameViews();
-            EditorApplication.delayCall += () => GameViewExtensions.RepaintAllViewsImmediately();
         }
 
         /// <summary>
@@ -168,8 +167,6 @@ namespace LookingGlass {
                 manualCalibrationMode = ManualCalibrationMode.None;
                 UpdateCalibration();
                 manualCalibration = Calibration;
-                GameViewExtensions.UpdateUserGameViews();
-                EditorApplication.delayCall += () => GameViewExtensions.RepaintAllViewsImmediately();
             } finally {
                 manualCalibrationMode = previous;
             }

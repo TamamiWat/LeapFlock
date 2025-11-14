@@ -23,10 +23,13 @@ Shader "LookingGlass/Lenticular" {
             ZTest Always
 
             HLSLPROGRAM
+
+            #pragma multi_compile _ LKG_BILINEAR
+
             #pragma vertex vert
             #pragma fragment frag
             #pragma target 4.6
-            
+
             #include "UnityCG.cginc"
             //WARNING: I'm writing all the shader source code here,
             //  Instead of doing this,
@@ -44,6 +47,8 @@ Shader "LookingGlass/Lenticular" {
 
             //SEE: /docs/LKG Bridge Lenticular Shader Modifications.md
             //  For documentation on updating this lenticular shader.
+
+            #pragma multi_compile _ ANTI_ALIASING
 
             struct SubpixelCell {
                 float ROffsetX;
@@ -66,6 +71,8 @@ Shader "LookingGlass/Lenticular" {
             uniform float tileCount;                                    //NEW
             uniform float4 viewPortion;
             uniform float4 tile;
+            uniform float rawSlope;
+            uniform float rawPitch;
 
             //NOTE: Not used for now in Unity, since the camera should be oriented for determining what it's focusing on.
             // uniform float focus;                                        //NEW
@@ -90,6 +97,19 @@ Shader "LookingGlass/Lenticular" {
             //EXTRA NOT found in LKG Bridge:
             uniform float4 aspect;
             uniform float verticalOffset; // just a dumb fix for macos in 2019.3
+
+            uniform float antiAliasingStrength;
+
+            float2 rotate(float2 uv, float angle) {
+                // float angle = atan2(-rawSlope, 1);
+                float cosAngle = cos(angle);
+                float sinAngle = sin(angle);
+
+                return float2(
+                    uv.x * cosAngle - uv.y * sinAngle,
+                    uv.x * sinAngle + uv.y * cosAngle
+                );
+            }
 
             int getCellForPixel(float2 screenUV) {
                 int xPos = int(screenUV.x * screenW);
@@ -189,7 +209,7 @@ Shader "LookingGlass/Lenticular" {
             }
 
             // the next 4 functions all take in a pixel coordinate and a set of views for each subpixel.
-            // then return the color for that pixel on the screen. 
+            // then return the color for that pixel on the screen.
 
             // this is the simplest sampling mode where we just cast the viewIndex to int and take the color from that tile.
             float4 getViewsColors(float2 tileUV, float3 views) {
@@ -201,11 +221,15 @@ Shader "LookingGlass/Lenticular" {
                     float viewDir = views[channel] * 2.0 - 1.0;
 
                     //NOTE: See uniform NOTE above on the "focus" uniform
-                    // float2 focusedUV = tileUV;
+                    float2 focusedUV = tileUV;
                     // focusedUV.x += viewDir * focus;
 
-                    float2 quiltUV = getQuiltCoordinates(/*focusedUV*/ tileUV, viewIndex);
+                    float2 quiltUV = getQuiltCoordinates(focusedUV, viewIndex);
+#ifdef LKG_BILINEAR
+                    color[channel] = tex2Dlod(_MainTex, float4(quiltUV, 0, 0))[channel];
+#else
                     color[channel] = tex2D(_MainTex, quiltUV)[channel];
+#endif
                 }
 
                 return color;
@@ -235,7 +259,7 @@ Shader "LookingGlass/Lenticular" {
 
             // the idea here is we center a gaussian on the ideal view and then
             // weight each sample based on its location on the gaussian
-            // the gaussian is only an estimation it is possible to measure 
+            // the gaussian is only an estimation it is possible to measure
             // the actual distribution of views, Alvin has some data about this
             // I just selected a sigma value I thought looked good
             float4 gaussianViewFiltering(float2 tileUV, float3 views) {
@@ -293,7 +317,7 @@ Shader "LookingGlass/Lenticular" {
                 return weight;
             }
 
-            // this currently does the same thing as the optimized gaussianViewFiltering 
+            // this currently does the same thing as the optimized gaussianViewFiltering
             // function but it does it for an arbitrary amount of views instead of just 3
             // this could also be updated to use real weights that we measure.
             float4 nrisViewFiltering(float2 tileUV, float3 views, int n) {
@@ -339,10 +363,10 @@ Shader "LookingGlass/Lenticular" {
             }
 
             float3 oldviewDimming(float3 views, float4 color) {
-                // black: 0.0 -> 0.06, 
-                // gradient to color: 0.06 -> 0.15, 
+                // black: 0.0 -> 0.06,
+                // gradient to color: 0.06 -> 0.15,
                 // color: 0.15 -> 0.85,
-                // gradient to black: 0.85 -> 0.94, 
+                // gradient to black: 0.85 -> 0.94,
                 // black: 0.94 -> 1.0
                 return min(-0.7932489 + 14.0647 * views - 14.0647 * views * views, 1.0);
             }
@@ -374,9 +398,9 @@ Shader "LookingGlass/Lenticular" {
             }
 
             float calculateEdgeFade(float2 tileUV) {
-                float fade = min(smoothstep(0.0, edgeThreshold, tileUV.x), 
+                float fade = min(smoothstep(0.0, edgeThreshold, tileUV.x),
                                 smoothstep(0.0, edgeThreshold, 1.0 - tileUV.x));
-                fade *= min(smoothstep(0.0, edgeThreshold, tileUV.y), 
+                fade *= min(smoothstep(0.0, edgeThreshold, tileUV.y),
                             smoothstep(0.0, edgeThreshold, 1.0 - tileUV.y));
                 return fade;
             }
@@ -390,53 +414,64 @@ Shader "LookingGlass/Lenticular" {
 
             struct VertexOutput {
                 float4 vertex : SV_POSITION;
-                float2 uv : TEXCOORD0;
+                float2 uv : TEXCOORD0; //The unmodified UV0 channel.
+                float2 transformedUV : TEXCOORD1; //The UV0 channel that has been transformed by the texture transform matrix (in the vertex shader).
             };
+
+            uniform float4x4 textureTransform;
 
             VertexOutput vert(VertexInput v) {
                 VertexOutput o;
                 o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+                o.uv = v.uv;
+                o.transformedUV = mul(textureTransform, float4(v.uv, 1, 1)).xy;
                 return o;
             }
 
             fixed4 frag(VertexOutput i) : SV_Target {
-                // first handle aspect
-                // note: recreated this using step functions because my mac didn't like the conditionals
-                // if ((aspect.x > aspect.y) || (aspect.x < aspect.y))
-                //     viewUV.x *= aspect.x / aspect.y;
-                // else 
-                //     viewUV.y *= aspect.y / aspect.x;
-                float2 viewUV = i.uv;
-                viewUV -= 0.5;
-                float modx = saturate(
-                    step(aspect.y, aspect.x) +
-                    step(aspect.x, aspect.y));
-                viewUV.x = modx * viewUV.x * aspect.x / aspect.y +
-                           (1.0 - modx) * viewUV.x;
-                viewUV.y = modx * viewUV.y +
-                           (1.0 - modx) * viewUV.y * aspect.y / aspect.x;
-                viewUV += 0.5;
-                clip(viewUV);
-                clip(-viewUV + 1.0);
-
                 float2 screenUV = i.uv; //Position on the display exactly
-                float2 tileUV = viewUV; //Position on the quilt tile (contains aspect ratio fixes, translation, zoom, cropping)
+                float2 tileUV = i.transformedUV; //Position on the quilt tile (contains aspect ratio fixes, translation, zoom, cropping)
 
                 // get the views for each subpixel
                 float3 views = getSubpixelViews(screenUV);
-                float4 outputColor = float4(0, 0, 0, 1);
+                float4 outputColor = 0;
 
                 // get the color for those views based on the filter mode
-                if (filterMode == 0 || tileCount <= 1) {
-                    outputColor = getViewsColors(tileUV, views);
-                } else if (filterMode == 1) {
-                    outputColor = oldViewFiltering(tileUV, views);
-                } else if (filterMode == 2) {
-                    outputColor = gaussianViewFiltering(tileUV, views);
-                } else if (filterMode == 3) {
-                    outputColor = nrisViewFiltering(tileUV, views, 10);
-                }
+                #if ANTI_ALIASING
+                    float aspect = screenW / screenH;
+                    float angle = atan2(-rawSlope, 1);
+                    float vpSize = float2(1 / rawPitch, 1 / rawPitch) * 0.5;
+                    for (int y = 0; y <= 1; y++) {
+                        for (int x = 0; x <= 1; x++) {
+                            float2 blur = float2(x, y) - 0.5;
+                            blur *= vpSize;
+                            blur = rotate(blur, angle);
+                            blur *= float2(1, aspect);
+                            blur *= antiAliasingStrength;
+
+                            if (filterMode == 0 || tileCount <= 1) {
+                                outputColor += getViewsColors(tileUV + blur, views);
+                            } else if (filterMode == 1) {
+                                outputColor += oldViewFiltering(tileUV + blur, views);
+                            } else if (filterMode == 2) {
+                                outputColor += gaussianViewFiltering(tileUV + blur, views);
+                            } else if (filterMode == 3) {
+                                outputColor += nrisViewFiltering(tileUV + blur, views, 10);
+                            }
+                        }
+                    }
+                    outputColor *= 0.25;
+                #else
+                    if (filterMode == 0 || tileCount <= 1) {
+                        outputColor = getViewsColors(tileUV, views);
+                    } else if (filterMode == 1) {
+                        outputColor = oldViewFiltering(tileUV, views);
+                    } else if (filterMode == 2) {
+                        outputColor = gaussianViewFiltering(tileUV, views);
+                    } else if (filterMode == 3) {
+                        outputColor = nrisViewFiltering(tileUV, views, 10);
+                    }
+                #endif
 
                 // dim the edges of view space to fade for displays without privacy filter
                 if (filterEdge == 1) {

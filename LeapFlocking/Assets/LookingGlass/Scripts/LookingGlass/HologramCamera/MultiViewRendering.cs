@@ -4,6 +4,8 @@ using UnityEngine;
 using UnityEngine.Profiling;
 using UnityEngine.Rendering;
 using LookingGlass.Toolkit;
+using LookingGlass.Mobile;
+
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -52,6 +54,8 @@ namespace LookingGlass {
             private bool initialized;
             public bool Initialized => initialized;
 
+            public ShaderPropertyId textureTransform;
+
             public ShaderPropertyId pitch;
             public ShaderPropertyId slope;
             public ShaderPropertyId center;
@@ -76,7 +80,12 @@ namespace LookingGlass {
 
             public ShaderPropertyId aspect;             //NOTE: CORRESPONDS TO QuiltSettings.renderAspect (the aspect of the renderer at the time of capture, NOT the tile's actual aspect, which may differ).
 
+            public ShaderPropertyId rawPitch;
+            public ShaderPropertyId rawSlope;
+
             public IEnumerable<ShaderPropertyId> GetAllProperties() {
+                yield return textureTransform;
+
                 yield return pitch;
                 yield return slope;
                 yield return center;
@@ -100,10 +109,15 @@ namespace LookingGlass {
                 yield return edgeThreshold;
 
                 yield return aspect;
+
+                yield return rawPitch;
+                yield return rawSlope;
             }
 
             public void InitializeAll() {
                 initialized = true;
+
+                textureTransform = "textureTransform";
 
                 pitch = "pitch";
                 slope = "slope";
@@ -128,6 +142,27 @@ namespace LookingGlass {
                 edgeThreshold = "edgeThreshold";
 
                 aspect = "aspect";
+
+                rawPitch = "rawPitch";
+                rawSlope = "rawSlope";
+            }
+        }
+
+        [Serializable]
+        private struct AspectAdjusterProperties {
+            private bool initialized;
+            public bool Initialized => initialized;
+
+            public ShaderPropertyId aspect;
+            public ShaderPropertyId sourceUVRect;
+            public ShaderPropertyId targetUVRect;
+
+            public void InitializeAll() {
+                initialized = true;
+
+                aspect = "aspect";
+                sourceUVRect = "sourceUVRect";
+                targetUVRect = "targetUVRect";
             }
         }
 
@@ -135,7 +170,6 @@ namespace LookingGlass {
         private struct RenderViewSharedData {
             public Camera singleViewCamera;
             public QuiltSettings quiltSettings;
-            public float aspect;
             public Matrix4x4 centerViewMatrix;
             public Matrix4x4 centerProjMatrix;
             public float viewConeSweep;
@@ -151,7 +185,10 @@ namespace LookingGlass {
         private static ComputeShader interpolationComputeShader;
         private static ViewInterpolationProperties interpolationProperties;
         private static LenticularProperties lenticularProperties;
+        private static AspectAdjusterProperties aspectAdjusterProperties;
         private static Material copyRGB_AMaterial;
+        private static Material aspectAdjusterMaterial;
+        private static GlobalKeyword useFakeDepthKeyword = GlobalKeyword.Create("USE_FAKE_DEPTH");
 
         public static IEnumerable<ShaderPropertyId> GetAllLenticularProperties() => lenticularProperties.GetAllProperties();
 
@@ -162,7 +199,9 @@ namespace LookingGlass {
 
         internal static void ClearBeforeRendering(RenderTexture target, HologramCamera hologramCamera) {
             HologramCameraProperties cameraData = hologramCamera.CameraProperties;
-            Clear(target, cameraData.ClearFlags, cameraData.BackgroundColor);
+            var color = cameraData.BackgroundColor;
+            color.a = 0f;
+            Clear(target, cameraData.ClearFlags, color);
         }
 
         internal static void Clear(RenderTexture renderTarget, CameraClearFlags clearFlags, Color color) {
@@ -220,9 +259,11 @@ namespace LookingGlass {
                 onViewRender = onViewRender
             };
 
-            data.aspect = hologramCamera.QuiltSettings.renderAspect; //TODO: Is this quiltAspect or ScreenAspect?
+            if (data.quiltSettings.renderAspect == 0)
+                Debug.LogError("The quiltSettings' renderAspect is zero!");
+
             data.viewConeSweep = (-focalPlane * Mathf.Tan(viewCone * 0.5f * Mathf.Deg2Rad) * 2);
-            data.projModifier = 1 / (size * data.aspect); //The projection matrices must be modified in terms of focal plane size
+            data.projModifier = 1 / (size * data.quiltSettings.renderAspect); //The projection matrices must be modified in terms of focal plane size
             if (data.viewConeSweep == 0)
                 Debug.LogError("The viewConeSweep should be non-zero! When zero, all the single-views may render the same image.");
 
@@ -270,7 +311,7 @@ namespace LookingGlass {
                 data.singleViewCamera.fieldOfView = 135;
             else
                 data.singleViewCamera.fieldOfView += 35;
-            data.singleViewCamera.aspect = data.aspect;
+            data.singleViewCamera.aspect = data.quiltSettings.renderAspect;
 
             HologramViewInterpolation viewInterpolation = hologramCamera.Optimization.ViewInterpolation;
             int onlyShowViewIndex = hologramCamera.Debugging.OnlyShowView;
@@ -286,8 +327,8 @@ namespace LookingGlass {
                         if (i == onlyShowViewIndex)
                             continue;
                         //Instead of re-rendering the single-view so many times, we can just copy it across the quilt way faster!
-                        CopyViewToQuilt(data.quiltSettings, i, viewRT, data.quilt);
-                        CopyViewToQuilt(data.quiltSettings, i, viewRTRFloat, data.quiltRTDepth);
+                        CopyViewToQuilt(data.quiltSettings, i, viewRT, data.quilt, true);
+                        CopyViewToQuilt(data.quiltSettings, i, viewRTRFloat, data.quiltRTDepth, true); //TODO: viewRTRFloat is null in URP
                     }
 
                     RenderTexture.ReleaseTemporary(viewRT);
@@ -327,6 +368,10 @@ namespace LookingGlass {
                 RunPostProcess(hologramCamera, data.quilt, data.quiltRTDepth);
             }
 #endif
+            SimpleDOF dof = hologramCamera.GetComponent<SimpleDOF>();
+            if (dof != null && dof.enabled) {
+                dof.DoDOF(data.quilt, data.quiltRTDepth);
+            }
         }
 
         private static RenderTexture CreateQuiltDepthTexture(RenderTexture quilt, bool isTemporary) {
@@ -348,8 +393,8 @@ namespace LookingGlass {
             //TODO: Is there a reason we don't notify after the view has **finished** rendering? (below, at the bottom of this for loop block)
             data.onViewRender?.Invoke(viewIndex);
 
-            viewRT = RenderTexture.GetTemporary(data.quiltSettings.TileWidth, data.quiltSettings.TileHeight, 24, data.quilt.format);
-            
+            viewRT = RenderTexture.GetTemporary(data.quiltSettings.TileWidth, data.quiltSettings.TileHeight, 24, data.quilt.graphicsFormat);
+
             //IMPORTANT: The single-view camera MUST clear before each render
             //TODO: Not sure how to fix Depthiness != 1 case of the background not clearing properly with Skybox clear flags...
             try {
@@ -403,7 +448,7 @@ namespace LookingGlass {
 
             data.singleViewCamera.Render();
 
-            CopyViewToQuilt(data.quiltSettings, viewIndex, viewRT, data.quilt);
+            CopyViewToQuilt(data.quiltSettings, viewIndex, viewRT, data.quilt, true);
             data.singleViewCamera.targetTexture = null;
 
             switch (RenderPipelineUtil.GetRenderPipelineType()) {
@@ -415,7 +460,7 @@ namespace LookingGlass {
                     Graphics.Blit(viewRTDepth, viewRTRFloat);
                     RenderTexture.ReleaseTemporary(viewRTDepth);
 
-                    CopyViewToQuilt(data.quiltSettings, viewIndex, viewRTRFloat, data.quiltRTDepth);
+                    CopyViewToQuilt(data.quiltSettings, viewIndex, viewRTRFloat, data.quiltRTDepth, true);
 
                     if (!persistViewTextures) {
                         RenderTexture.ReleaseTemporary(viewRT);
@@ -428,20 +473,48 @@ namespace LookingGlass {
                     GL.Flush();
                     break;
                 default:
-                    RenderTexture.ReleaseTemporary(viewRT);
-                    viewRT = null;
                     viewRTRFloat = null;
+                    if (!persistViewTextures) {
+                        RenderTexture.ReleaseTemporary(viewRT);
+                        viewRT = null;
+                    }
                     break;
             }
         }
 
-        private static Rect GetViewRect(QuiltSettings quiltSettings, int viewIndex) {
-            int reversedViewIndex = quiltSettings.columns * quiltSettings.rows - viewIndex - 1;
+        private static Rect GetViewRect(QuiltSettings quiltSettings, int viewIndex, bool normalized = false, bool flipY = false) {
+            //NOTE: These are in the texture's pixel coordinates from the bottom-left:
+            int px = (viewIndex % quiltSettings.columns) * quiltSettings.TileWidth;
+            int py = (viewIndex / quiltSettings.columns) * quiltSettings.TileHeight + quiltSettings.PaddingVertical;
 
-            int targetX = (viewIndex % quiltSettings.columns) * quiltSettings.TileWidth;
-            int targetY = (reversedViewIndex / quiltSettings.columns) * quiltSettings.TileHeight + quiltSettings.PaddingVertical; //NOTE: Reversed here because Y is taken from the top
+            Rect rect = new(px, py, quiltSettings.TileWidth, quiltSettings.TileHeight);
+            if (normalized) {
+                rect.x /= quiltSettings.quiltWidth;
+                rect.y /= quiltSettings.quiltHeight;
+                rect.width /= quiltSettings.quiltWidth;
+                rect.height /= quiltSettings.quiltHeight;
+                if (flipY) {
+                    rect.y = 1 - rect.y;
+                    rect.y -= ((float) quiltSettings.TileHeight / quiltSettings.quiltHeight);   //NOTE: This flips where we're starting from, from the bottom-left of the quilt tile originally, to now the top-left of the quilt tile.
+                }
+            } else {
+                if (flipY) {
+                    rect.y = quiltSettings.quiltHeight - rect.y;
+                    rect.y -= quiltSettings.TileHeight;                                         //NOTE: This flips where we're starting from, from the bottom-left of the quilt tile originally, to now the top-left of the quilt tile.
+                }
+            }
 
-            return new Rect(targetX, targetY, quiltSettings.TileWidth, quiltSettings.TileHeight);
+            return rect;
+        }
+
+        public static void GetViewRowColumn(in QuiltSettings quiltSettings, int viewIndex, out int column, out int row) {
+            column = 0;
+            row = 0;
+
+            if (quiltSettings.columns > 0) {
+                column = viewIndex % quiltSettings.columns;
+                row = viewIndex / quiltSettings.columns;
+            }
         }
 
         /// <summary>
@@ -451,85 +524,93 @@ namespace LookingGlass {
         /// <param name="quiltSettings">The quilt settings that correspond to <paramref name="quilt"/>.</param>
         /// <param name="view">The view that will be copied to every tile of the <paramref name="quilt"/>.</param>
         /// <param name="quilt">The target texture that will have the <paramref name="view"/> copied over all of its tiles.</param>
-        public static void CopyViewToAllQuiltTiles(QuiltSettings quiltSettings, Texture view, RenderTexture quilt) {
+        /// <param name="bypassAspectAdjustment">See: <see cref="RenderStack.BypassAspectAdjustment"/></param>
+        public static void CopyViewToAllQuiltTiles(QuiltSettings quiltSettings, Texture view, RenderTexture quilt, bool bypassAspectAdjustment) {
             for (int v = 0; v < quiltSettings.tileCount; v++)
-                MultiViewRendering.CopyViewToQuilt(quiltSettings, v, view, quilt);
+                MultiViewRendering.CopyViewToQuilt(quiltSettings, v, view, quilt, bypassAspectAdjustment);
         }
 
         /// <summary>
         /// Copies an entire texture into the single-view tile of a quilt.
         /// </summary>
-        public static void CopyViewToQuilt(QuiltSettings quiltSettings, int viewIndex, Texture view, RenderTexture quilt) {
-            //NOTE: not using Graphics.CopyTexture(...) because it's an exact per-pixel copy (100% overwrite, no alpha-blending support).
-            Rect viewRect = GetViewRect(quiltSettings, viewIndex);
-
-            Graphics.SetRenderTarget(quilt);
-            GL.PushMatrix();
-            GL.LoadPixelMatrix(0, quiltSettings.quiltWidth, quiltSettings.quiltHeight, 0);
-            Graphics.DrawTexture(viewRect, view);
-            GL.PopMatrix();
-            Graphics.SetRenderTarget(null);
+        /// <param name="bypassAspectAdjustment">See: <see cref="RenderStack.BypassAspectAdjustment"/></param>
+        public static void CopyViewToQuilt(QuiltSettings quiltSettings, int viewIndex, Texture view, RenderTexture quilt, bool bypassAspectAdjustment) {
+#if LKG_ASPECT_ADJUSTMENT
+            if (bypassAspectAdjustment) {
+#endif
+            Rect fromRect = new Rect(0, 0, 1, 1);
+                Rect toPixelRect = GetViewRect(quiltSettings, viewIndex, false, true);
+                Graphics.SetRenderTarget(quilt);
+                GL.PushMatrix();
+                GL.LoadPixelMatrix(0, quilt.width, quilt.height, 0);
+                Graphics.DrawTexture(toPixelRect, view, fromRect, 0, 0, 0, 0);
+                GL.PopMatrix();
+                Graphics.SetRenderTarget(null);
+#if LKG_ASPECT_ADJUSTMENT
+            } else {
+                Rect fromUVRect = new Rect(0, 0, 1, 1);
+                Rect toUVRect = GetViewRect(quiltSettings, viewIndex, true);
+                SetAspectAdjusterMaterialSettings(1, 1, fromUVRect, toUVRect);
+                Graphics.Blit(view, quilt, aspectAdjusterMaterial);
+            }
+#endif
         }
 
         /// <summary>
         /// Copies a single-view from one quilt to another quilt.
         /// </summary>
-        public static void CopyViewBetweenQuilts(QuiltSettings fromRenderSettings, int fromView, RenderTexture fromQuilt,
-            QuiltSettings toRenderSettings, int toView, RenderTexture toQuilt) {
+        /// <param name="bypassAspectAdjustment">See: <see cref="RenderStack.BypassAspectAdjustment"/></param>
+        public static void CopyViewBetweenQuilts(QuiltSettings fromQuiltSettings, int fromView, RenderTexture fromQuilt,
+            QuiltSettings toQuiltSettings, int toView, RenderTexture toQuilt, bool bypassAspectAdjustment) {
+#if LKG_ASPECT_ADJUSTMENT
+            if (bypassAspectAdjustment) {
+#endif
+                Rect fromRect = GetViewRect(fromQuiltSettings, fromView, true);
+                Rect toPixelRect = GetViewRect(toQuiltSettings, toView, false, true);
+                Graphics.SetRenderTarget(toQuilt);
+                GL.PushMatrix();
+                GL.LoadPixelMatrix(0, toQuilt.width, toQuilt.height, 0);
+                Graphics.DrawTexture(toPixelRect, fromQuilt, fromRect, 0, 0, 0, 0);
+                GL.PopMatrix();
+                Graphics.SetRenderTarget(null);
+#if LKG_ASPECT_ADJUSTMENT
+            } else {
+                Rect fromUVRect = GetViewRect(fromQuiltSettings, fromView, true);
+                Rect toUVRect = GetViewRect(toQuiltSettings, toView, true);
 
-            Rect fromRect = GetViewRect(fromRenderSettings, fromView);
-            Rect toRect = GetViewRect(toRenderSettings, toView);
-
-            //NOTE: I'm not sure why we have to manually flip our coordinates, I'm hoping this is expected by Unity when (SystemInfo.graphicsUVStartsAtTop == true)
-            //Without this, our quilts were copying in reverse!
-            if (SystemInfo.graphicsUVStartsAtTop)
-                fromRect.y = (fromQuilt.height - fromRenderSettings.TileHeight) - fromRect.y;
-
-            Rect normalizedFromRect = new Rect(
-                fromRect.x / fromQuilt.width,
-                fromRect.y / fromQuilt.height,
-                fromRect.width / fromQuilt.width,
-                fromRect.height / fromQuilt.height
-            );
-
-            Graphics.SetRenderTarget(toQuilt);
-            GL.PushMatrix();
-            GL.LoadPixelMatrix(0, toRenderSettings.quiltWidth, toRenderSettings.quiltHeight, 0);
-            Graphics.DrawTexture(toRect, fromQuilt, normalizedFromRect, 0, 0, 0, 0);
-            GL.PopMatrix();
-            Graphics.SetRenderTarget(null);
+                SetAspectAdjusterMaterialSettings(fromQuiltSettings.renderAspect, toQuiltSettings.renderAspect, fromUVRect, toUVRect);
+                Graphics.Blit(fromQuilt, toQuilt, aspectAdjusterMaterial);
+            }
+#endif
         }
 
         /// <summary>
         /// Copies a single-view from one quilt to the <paramref name="destination"/> texture.
         /// </summary>
-        public static void CopyViewFromQuilt(QuiltSettings fromRenderSettings, int fromView, RenderTexture fromQuilt, RenderTexture destination) {
+        public static void CopyViewFromQuilt(QuiltSettings fromQuiltSettings, int fromView, RenderTexture fromQuilt, RenderTexture destination, bool bypassAspectAdjustment) {
             if (fromQuilt == null)
                 throw new ArgumentNullException(nameof(fromQuilt));
             if (destination == null)
                 throw new ArgumentNullException(nameof(destination));
-
-            Rect fromRect = GetViewRect(fromRenderSettings, fromView);
-            Rect toRect = new Rect(0, 0, destination.width, destination.height);
-
-            //NOTE: I'm not sure why we have to manually flip our coordinates, I'm hoping this is expected by Unity when (SystemInfo.graphicsUVStartsAtTop == true)
-            //Without this, our quilts were copying in reverse!
-            if (SystemInfo.graphicsUVStartsAtTop)
-                fromRect.y = (fromQuilt.height - fromRenderSettings.TileHeight) - fromRect.y;
-
-            Rect normalizedFromRect = new Rect(
-                fromRect.x / fromQuilt.width,
-                fromRect.y / fromQuilt.height,
-                fromRect.width / fromQuilt.width,
-                fromRect.height / fromQuilt.height
-            );
-
-            Graphics.SetRenderTarget(destination);
-            GL.PushMatrix();
-            GL.LoadPixelMatrix(0, destination.width, destination.height, 0);
-            Graphics.DrawTexture(toRect, fromQuilt, normalizedFromRect, 0, 0, 0, 0);
-            GL.PopMatrix();
-            Graphics.SetRenderTarget(null);
+#if LKG_ASPECT_ADJUSTMENT
+            if (bypassAspectAdjustment) {
+#endif
+                Rect fromRect = GetViewRect(fromQuiltSettings, fromView, true);
+                Rect toPixelRect = new Rect(0, 0, destination.width, destination.height);
+                Graphics.SetRenderTarget(destination);
+                GL.PushMatrix();
+                GL.LoadPixelMatrix(0, destination.width, destination.height, 0);
+                Graphics.DrawTexture(toPixelRect, fromQuilt, fromRect, 0, 0, 0, 0);
+                GL.PopMatrix();
+                Graphics.SetRenderTarget(null);
+#if LKG_ASPECT_ADJUSTMENT
+            } else {
+                Rect fromUVRect = GetViewRect(fromQuiltSettings, fromView, true);
+                Rect toUVRect = new Rect(0, 0, 1, 1);
+                SetAspectAdjusterMaterialSettings(1, 1, fromUVRect, toUVRect);
+                Graphics.Blit(fromQuilt, destination, aspectAdjusterMaterial);
+            }
+#endif
         }
 
         /// <summary>
@@ -557,8 +638,12 @@ namespace LookingGlass {
             postProcessCamera.clearFlags = CameraClearFlags.Nothing;
             postProcessCamera.targetTexture = target;
 
+            Shader.SetGlobalInt("hp_useQuilt", 1);
             Shader.SetGlobalTexture("_FAKEDepthTexture", depthTexture);
+            Shader.SetKeyword(useFakeDepthKeyword, true);
             postProcessCamera.Render();
+            Shader.SetGlobalInt("hp_useQuilt", 0);
+            Shader.SetKeyword(useFakeDepthKeyword, false);
 
             if (preserveAlpha) {
                 if (copyRGB_AMaterial == null)
@@ -573,8 +658,12 @@ namespace LookingGlass {
         }
 
         internal static RenderTexture RenderPreview2D(HologramCamera hologramCamera, bool ignorePostProcessing = false) {
-            if (hologramCamera == null || !hologramCamera.Initialized)
-                throw new ArgumentException("The camera must be finished initializing before it can render.", nameof(hologramCamera));
+            if (hologramCamera == null || !hologramCamera.Initialized) {
+                Debug.LogError("The camera must be non-null and finished initializing before it can render.");
+                if (hologramCamera == null)
+                    return null;
+                return hologramCamera.Preview2DRT;
+            }
             Profiler.BeginSample(nameof(RenderPreview2D), hologramCamera);
             try {
                 Profiler.BeginSample("Create " + nameof(RenderTexture) + "s", hologramCamera);
@@ -801,66 +890,103 @@ namespace LookingGlass {
             viewOffsetsBuffer.Dispose();
             baseViewPositionsBuffer.Dispose();
         }
-        public static void SetLenticularMaterialSettings(HologramCamera hologramCamera, Material lenticularMaterial) {
-            if (lenticularMaterial == null)
-                throw new ArgumentNullException(nameof(lenticularMaterial));
+
+        public static Material CreateLenticularMaterial(Shader overrideLenticularShader = null) {
+            Material material = null;
+            CreateLenticularMaterial(ref material, overrideLenticularShader);
+            return material;
+        }
+        public static void CreateLenticularMaterial(ref Material material, Shader overrideLenticularShader = null) {
+            if (material != null)
+                Material.DestroyImmediate(material);
+            Shader lenticular = (overrideLenticularShader != null) ? overrideLenticularShader : Util.FindShader("LookingGlass/Lenticular");
+            material = new Material(lenticular);
+        }
+
+        public static void SetLenticularMaterialSettings(HologramCamera camera, Material material) {
+            Calibration cal = camera.Calibration;
+            QuiltSettings quiltSettings = camera.QuiltSettings;
+            ScreenRect lenticularRegion = camera.LenticularRegion;
+
+            // set to use tex2dlod if we have bilinear filtering on
+            if (camera.renderStack.filterMode == QuiltFilterMode.Bilinear) {
+                material.EnableKeyword("LKG_BILINEAR");
+            } else {
+                material.DisableKeyword("LKG_BILINEAR");
+            }
+
+            SetLenticularMaterialSettings(material, cal, quiltSettings, lenticularRegion,
+                ref camera.subpixelCellBuffer, ref camera.normalizedSubpixelCells,
+                camera.RenderStack.FilterMode.UsesLenticularAA(), camera.RenderStack.AntiAliasingStrength,
+                camera.Preview2D, camera.CameraProperties.CenterOffset
+            );
+        }
+        public static void SetLenticularMaterialSettings(Material material, Calibration cal, QuiltSettings quiltSettings, ScreenRect lenticularRegion,
+            ref ComputeBuffer subpixelCellBuffer, ref SubpixelCell[] normalizedSubpixelCells, bool antiAliasing, float antiAliasingStrength, bool preview2D = false, float centerOffset = 0) {
+            if (material == null)
+                throw new ArgumentNullException(nameof(material));
 
             if (!lenticularProperties.Initialized)
                 lenticularProperties.InitializeAll();
 
-            Calibration cal = hologramCamera.Calibration;
-            QuiltSettings quiltSettings = hologramCamera.QuiltSettings;
-            ScreenRect lenticularRegion = hologramCamera.LenticularRegion;
-            float aspect = hologramCamera.QuiltSettings.renderAspect;
+            float aspect = quiltSettings.renderAspect;
             float maxTileCount = quiltSettings.columns * quiltSettings.rows;
             int screenW = lenticularRegion.Width;
             int screenH = lenticularRegion.Height;
 
-            lenticularMaterial.SetFloat(lenticularProperties.screenW, screenW);
-            lenticularMaterial.SetFloat(lenticularProperties.screenH, screenH);
-            lenticularMaterial.SetFloat(lenticularProperties.tileCount, quiltSettings.tileCount);
-            lenticularMaterial.SetFloat(lenticularProperties.pitch, Calibration.ProcessPitch(lenticularRegion.Width, cal));
+            material.SetFloat(lenticularProperties.rawSlope, cal.slope);
+            material.SetFloat(lenticularProperties.rawPitch, cal.pitch * screenW / cal.dpi); //TODO: This isn't quite rawPitch, is it? And it's also not processed pitch either... based on the math formulas
+            if (antiAliasing) {
+                material.EnableKeyword("ANTI_ALIASING");
+                material.SetFloat("antiAliasingStrength", antiAliasingStrength);
+            } else {
+                material.DisableKeyword("ANTI_ALIASING");
+                material.SetFloat("antiAliasingStrength", 1);
+            }
 
-            lenticularMaterial.SetFloat(lenticularProperties.slope, Calibration.ProcessSlope(lenticularRegion.Width, lenticularRegion.Height, cal));
-            lenticularMaterial.SetFloat(lenticularProperties.center, cal.center
+            material.SetFloat(lenticularProperties.screenW, screenW);
+            material.SetFloat(lenticularProperties.screenH, screenH);
+            material.SetFloat(lenticularProperties.tileCount, quiltSettings.tileCount);
+            material.SetFloat(lenticularProperties.pitch, Calibration.ProcessPitch(screenW, cal));
+
+            material.SetFloat(lenticularProperties.slope, Calibration.ProcessSlope(screenW, screenH, cal));
+            material.SetFloat(lenticularProperties.center, cal.center
 #if UNITY_EDITOR
-                + hologramCamera.CameraProperties.CenterOffset
+                + centerOffset
 #endif
             );
-            lenticularMaterial.SetFloat(lenticularProperties.subpixelSize, (float) 1 / (3 * screenW) * (cal.flipImageX >= 0.5f ? -1 : 1));
+            material.SetFloat(lenticularProperties.subpixelSize, (float) 1 / (3 * screenW) * (cal.flipImageX >= 0.5f ? -1 : 1));
 
-            lenticularMaterial.SetVector(lenticularProperties.tile, new Vector4(
+            material.SetVector(lenticularProperties.tile, new Vector4(
                 quiltSettings.columns,
                 quiltSettings.rows,
                 quiltSettings.tileCount,
                 maxTileCount
             ));
-            lenticularMaterial.SetVector(lenticularProperties.viewPortion, new Vector4(
+            material.SetVector(lenticularProperties.viewPortion, new Vector4(
                 quiltSettings.ViewPortionHorizontal,
                 quiltSettings.ViewPortionVertical
             ));
 
-            lenticularMaterial.SetVector(lenticularProperties.aspect, new Vector4(
+            material.SetVector(lenticularProperties.aspect, new Vector4(
                 aspect,
                 aspect
             ));
 
-            bool shouldDimEdgeViews = !hologramCamera.Preview2D;
+            bool shouldDimEdgeViews = !preview2D;
 
-            lenticularMaterial.SetInt(lenticularProperties.filterMode, 1);
-            lenticularMaterial.SetInt(lenticularProperties.cellPatternType, cal.cellPatternMode);
+            material.SetInt(lenticularProperties.filterMode, 2);
+            material.SetInt(lenticularProperties.cellPatternType, cal.cellPatternMode);
 
-            lenticularMaterial.SetInt(lenticularProperties.filterEdge, shouldDimEdgeViews ? 1 : 0);
-            lenticularMaterial.SetFloat(lenticularProperties.filterEnd, 0.05f);
-            lenticularMaterial.SetFloat(lenticularProperties.filterSize, 0.15f);
-            lenticularMaterial.SetFloat(lenticularProperties.gaussianSigma, 0.01f);
-            lenticularMaterial.SetFloat(lenticularProperties.edgeThreshold, 0.01f);
+            material.SetInt(lenticularProperties.filterEdge, shouldDimEdgeViews ? 1 : 0);
+            material.SetFloat(lenticularProperties.filterEnd, 0.05f);
+            material.SetFloat(lenticularProperties.filterSize, 0.15f);
+            material.SetFloat(lenticularProperties.gaussianSigma, 0.01f);
+            material.SetFloat(lenticularProperties.edgeThreshold, 0.01f);
 
             int subpixelCellCount = cal.subpixelCells?.Length ?? 0;
-            ComputeBuffer subpixelCellBuffer = hologramCamera.subpixelCellBuffer;
-            SubpixelCell[] normalizedSubpixelCells = hologramCamera.normalizedSubpixelCells;
             try {
-                lenticularMaterial.SetInt(lenticularProperties.subpixelCellCount, subpixelCellCount);
+                material.SetInt(lenticularProperties.subpixelCellCount, subpixelCellCount);
                 if (subpixelCellBuffer != null) {
                     if (subpixelCellBuffer.count != subpixelCellCount) {
                         subpixelCellBuffer.Dispose();
@@ -896,11 +1022,68 @@ namespace LookingGlass {
                     normalizedSubpixelCells = null;
                 }
 
-                lenticularMaterial.SetBuffer(lenticularProperties.subpixelCells, subpixelCellBuffer);
-            } finally {
-                hologramCamera.subpixelCellBuffer = subpixelCellBuffer;
-                hologramCamera.normalizedSubpixelCells = normalizedSubpixelCells;
+                material.SetBuffer(lenticularProperties.subpixelCells, subpixelCellBuffer);
+            } catch (Exception e) {
+                Debug.LogException(e);
             }
+
+            Matrix4x4 textureTransform = Matrix4x4.identity;
+
+            float cropPosX = 0;
+            float cropPosY = 0;
+            float zoom = 1;
+            float textureAspect = quiltSettings.renderAspect;
+            float displayAspect = cal.ScreenAspect;
+
+            textureTransform = Matrix4x4.Translate(new Vector3(cropPosX, cropPosY, 0)) * textureTransform;
+            textureTransform = Matrix4x4.Translate(new Vector3(0.5f, 0.5f, 0)) * textureTransform;
+            textureTransform = Matrix4x4.Scale(new Vector3(zoom, zoom, 1)) * textureTransform;
+            textureTransform = Matrix4x4.Translate(new Vector3(-0.5f, -0.5f, 0)) * textureTransform;
+
+            Vector3 offset = new Vector3(0, 0, 0);
+            Vector3 scale = new Vector3(1, 1, 1);
+
+            // rotate 90?
+            if (cal.GetDeviceType() == LKGDeviceType._16inPortraitGen3
+                || cal.GetDeviceType() == LKGDeviceType._27inPortraitGen3)
+            {
+                if (textureAspect > displayAspect) {
+                    scale.x = textureAspect / displayAspect;
+                    offset.x = (1 - scale.x) / 2;
+                } else if (textureAspect < displayAspect) {
+                    scale.y = displayAspect / textureAspect;
+                    offset.y = (1 - scale.y) / 2;
+                }
+            }
+            else {
+                if (textureAspect > displayAspect) {
+                    scale.y = textureAspect / displayAspect;
+                    offset.y = (1 - scale.y) / 2;
+                } else if (textureAspect < displayAspect) {
+                    scale.x = displayAspect / textureAspect;
+                    offset.x = (1 - scale.x) / 2;
+                }
+            }
+
+            textureTransform = Matrix4x4.Scale(scale) * textureTransform;
+            textureTransform = Matrix4x4.Translate(offset) * textureTransform;
+            material.SetMatrix(lenticularProperties.textureTransform, textureTransform);
+        }
+
+        //NOTE: sourceAspect is the aspect ratio of the content we're gonna be blitting from.
+        //  destAspect is the original aspect ratio of the target quilt we're blitting into.
+        //  If sourceAspect = 2,
+        //  and destAspect = 1.5,
+        //  That means we only need to adjust the aspect ratio by (2 / 1.5) = 1.333333.
+        private static void SetAspectAdjusterMaterialSettings(float sourceAspect, float destAspect, Rect fromUVRect, Rect toUVRect) {
+            if (aspectAdjusterMaterial == null)
+                aspectAdjusterMaterial = new Material(Util.FindShader("LookingGlass/Aspect Adjuster"));
+            if (!aspectAdjusterProperties.Initialized)
+                aspectAdjusterProperties.InitializeAll();
+
+            aspectAdjusterMaterial.SetFloat(aspectAdjusterProperties.aspect, sourceAspect / destAspect);
+            aspectAdjusterMaterial.SetVector(aspectAdjusterProperties.sourceUVRect, new Vector4(fromUVRect.x, fromUVRect.y, fromUVRect.width, fromUVRect.height));
+            aspectAdjusterMaterial.SetVector(aspectAdjusterProperties.targetUVRect, new Vector4(toUVRect.x, toUVRect.y, toUVRect.width, toUVRect.height));
         }
     }
 }

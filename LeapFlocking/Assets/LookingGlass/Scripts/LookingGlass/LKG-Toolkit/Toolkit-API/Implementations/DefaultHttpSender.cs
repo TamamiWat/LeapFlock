@@ -14,6 +14,7 @@ namespace LookingGlass.Toolkit {
 
         public DefaultHttpSender() {
             client = new HttpClient();
+            client.Timeout = TimeSpan.FromSeconds(5);
         }
 
         public void Dispose() {
@@ -33,11 +34,20 @@ namespace LookingGlass.Toolkit {
             }
         }
 
-        public string Send(HttpSenderMethod method, string url, string content) => SendAsync(method, url, content).Result;
+        public string Send(HttpSenderMethod method, string url, string content) {
+            HttpRequestMessage request = new(GetInnerMethod(method), url);
+            if (method == HttpSenderMethod.Post || method == HttpSenderMethod.Put)
+                request.Content = new StringContent(content);
+
+            HttpResponseMessage response = client.SendAsync(request).Result;
+            return response.Content.ReadAsStringAsync().Result;
+        }
+
         public async Task<string> SendAsync(HttpSenderMethod method, string url, string content) {
-            HttpRequestMessage request = new(GetInnerMethod(method), content) {
-                Content = new StringContent(content)
-            };
+            HttpRequestMessage request = new(GetInnerMethod(method), url);
+            if (method == HttpSenderMethod.Post || method == HttpSenderMethod.Put)
+                request.Content = new StringContent(content);
+
             HttpResponseMessage response = await client.SendAsync(request);
             return await response.Content.ReadAsStringAsync();
         }

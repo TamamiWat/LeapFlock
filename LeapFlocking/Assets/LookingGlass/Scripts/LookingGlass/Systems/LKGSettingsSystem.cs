@@ -8,6 +8,9 @@ using UnityEngine.InputSystem;
 #endif
 
 namespace LookingGlass {
+    /// <summary>
+    /// A system that's always active in both edit mode and playmode, 
+    /// </summary>
     public static class LKGSettingsSystem {
         [ExecuteAlways]
         private class BehaviourEvents : MonoBehaviour {
@@ -18,13 +21,25 @@ namespace LookingGlass {
             }
         }
 
+        /// <summary>
+        /// The file containing settings for debugging and logging.
+        /// </summary>
+        /// <remarks>
+        /// This file should go next to your Unity Assets folder (not inside), or next to your Unity build's main executable.<br />
+        /// A <see cref="FileSystemWatcher"/> is used to detect and apply changes from it automatically as you edit and save the JSON file, so you do not need to re-build your project or exit playmode to have them take effect.
+        /// </remarks>
         public const string FileName = "lkg-settings.json";
+
         private static object syncRoot = new();
         private static FileSystemWatcher fileWatcher;
         private static bool isDirty = false;
+        private static string nextSettingsJSON = null;
         private static BehaviourEvents events;
         private static LKGSettings settings = LKGSettings.Default;
 
+        /// <summary>
+        /// The debugging and logging settings that are currently in-use for the LKG Unity Plugin.
+        /// </summary>
         public static LKGSettings Settings => settings;
 
         internal static void InitializeSystem() {
@@ -64,12 +79,16 @@ namespace LookingGlass {
 
         private static void OnUpdate() {
             bool shouldUpdate = false;
+            string json = null; //NOTE: Just for printing out what the new settings are to the console.
             lock (syncRoot) {
                 shouldUpdate = isDirty;
+                json = nextSettingsJSON;
                 isDirty = false;
+                nextSettingsJSON = null;
             }
 
             if (shouldUpdate) {
+                Debug.Log("Detected file change on " + FileName + ": Applying new settings:\n" + json);
                 ApplySettings();
             }
 
@@ -102,7 +121,6 @@ namespace LookingGlass {
         private static void ApplySettings() {
             LKGSettings settings = LKGSettingsSystem.settings;
 #if HAS_NEWTONSOFT_JSON
-            Debug.Log("ApplySettings(" + UnityNewtonsoftJSONSerializer.Serialize(settings, true) + ")");
             LKGDisplaySystem.BridgeConnection.LoggingFlags = settings.loggingFlags;
 #endif
         }
@@ -116,6 +134,7 @@ namespace LookingGlass {
             string text = await File.ReadAllTextAsync(filePath);
             lock (syncRoot) {
                 isDirty = true;
+                nextSettingsJSON = text;
                 settings = UnityNewtonsoftJSONSerializer.Deserialize<LKGSettings>(text);
             }
 #endif

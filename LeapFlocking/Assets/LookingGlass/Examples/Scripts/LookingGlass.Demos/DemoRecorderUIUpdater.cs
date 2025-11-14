@@ -1,10 +1,13 @@
-﻿using UnityEngine;
+﻿
+using UnityEngine;
 using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 namespace LookingGlass.Demos {
     public class DemoRecorderUIUpdater : MonoBehaviour {
+#if UNITY_EDITOR || !UNITY_IOS
         [SerializeField] private QuiltCapture recorder;
+#endif
         [SerializeField] private GameObject uiParent;
 
         [Header("Buttons")]
@@ -13,6 +16,7 @@ namespace LookingGlass.Demos {
         [SerializeField] private Button pauseButton;
         [SerializeField] private Button resumeButton;
 
+#if UNITY_EDITOR || !UNITY_IOS
         public QuiltCapture Recorder {
             get { return recorder; }
             private set {
@@ -70,5 +74,12 @@ namespace LookingGlass.Demos {
         private void UpdateShowingUI(QuiltCaptureMode captureMode) {
             uiParent.SetActive(captureMode == QuiltCaptureMode.Manual);
         }
+#else
+        private void OnEnable(){
+            if (startButton != null)
+                startButton.GetComponent<Button>().onClick.AddListener(() => Debug.LogWarning("Recorder is not supported in iOS build"));
+        }
+#endif
+
     }
 }

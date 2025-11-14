@@ -8,6 +8,8 @@ namespace LookingGlass {
                 case QuiltScreenshotPreset.LookingGlassPortrait: return QuiltRecordingSettings.GetSettings(QuiltRecordingPreset.LookingGlassPortrait).cameraOverrideSettings;
                 case QuiltScreenshotPreset.LookingGlass16Landscape: return QuiltRecordingSettings.GetSettings(QuiltRecordingPreset.LookingGlass16Landscape).cameraOverrideSettings;
                 case QuiltScreenshotPreset.LookingGlass16Portrait: return QuiltRecordingSettings.GetSettings(QuiltRecordingPreset.LookingGlass16Portrait).cameraOverrideSettings;
+                case QuiltScreenshotPreset.LookingGlass27Landscape: return QuiltRecordingSettings.GetSettings(QuiltRecordingPreset.LookingGlass27Landscape).cameraOverrideSettings;
+                case QuiltScreenshotPreset.LookingGlass27Portrait: return QuiltRecordingSettings.GetSettings(QuiltRecordingPreset.LookingGlass27Portrait).cameraOverrideSettings;
                 case QuiltScreenshotPreset.LookingGlass32Landscape: return QuiltRecordingSettings.GetSettings(QuiltRecordingPreset.LookingGlass32Landscape).cameraOverrideSettings;
                 case QuiltScreenshotPreset.LookingGlass32Portrait: return QuiltRecordingSettings.GetSettings(QuiltRecordingPreset.LookingGlass32Portrait).cameraOverrideSettings;
                 case QuiltScreenshotPreset.LookingGlass65: return QuiltRecordingSettings.GetSettings(QuiltRecordingPreset.LookingGlass65).cameraOverrideSettings;

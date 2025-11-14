@@ -11,7 +11,9 @@ using UnityEngine.Assertions;
 using UnityEditor;
 using LookingGlass.Editor.EditorPropertyGroups;
 using LookingGlass.Toolkit;
-
+#if HAS_URP
+using UnityEngine.Rendering.Universal;
+#endif
 namespace LookingGlass.Editor {
     [InitializeOnLoad]
     [CustomEditor(typeof(HologramCamera))]
@@ -37,7 +39,7 @@ namespace LookingGlass.Editor {
 
         public const string PrefabGuid = "3019d4eebe2593e428d7b9ccb096ceda";
         public static string PrefabAssetPath => AssetDatabase.GUIDToAssetPath(PrefabGuid);
-        private static int CondensedLineSpace => (int) (0.75f * EditorGUIUtility.singleLineHeight);
+        private static int CondensedLineSpace => (int)(0.75f * EditorGUIUtility.singleLineHeight);
 
         [MenuItem("GameObject/Looking Glass/Add Hologram Camera to Scene", false, 10)]
         private static void AddHologramCameraToScene() => CreateHologramCamera();
@@ -51,7 +53,7 @@ namespace LookingGlass.Editor {
         // This function is for a right click menu on a game object with a camera component.
         [MenuItem("GameObject/Looking Glass/Convert to Hologram Camera")]
         private static void CameraComponentToHologramCamera() => ConvertCameraConfirmWindow();
-            
+
 
         // This function is for right clicking on a camera component
         [MenuItem("CONTEXT/Camera/Convert to Hologram Camera")]
@@ -78,7 +80,7 @@ namespace LookingGlass.Editor {
                 GameObject.DestroyImmediate(temp);
             }
 
-            GameObject gameObject = (GameObject) PrefabUtility.InstantiatePrefab(prefab, parent);
+            GameObject gameObject = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
             gameObject.name = prefab.name;
 
             if (siblingIndex >= 0)
@@ -112,8 +114,7 @@ namespace LookingGlass.Editor {
             Undo.DestroyObjectImmediate(target);
         }
 
-        private static void ConvertCameraConfirmWindow()
-        {
+        private static void ConvertCameraConfirmWindow() {
             GameObject target = Selection.activeGameObject;
             Assert.IsNotNull(target);
 
@@ -122,8 +123,7 @@ namespace LookingGlass.Editor {
                 "Would you like to set your camera to Looking Glass Camera defaults? \n\n" +
                 "Warning! This may break existing camera animations!", "Yes", "Cancel", "No");
 
-            switch (dialogChoice)
-            {
+            switch (dialogChoice) {
                 case 0:
                     ConvertToHologramCamera(target, true);
                     Debug.Log("Use recommended values function"); // Slap on default Looking Glass Camera?
@@ -259,6 +259,7 @@ namespace LookingGlass.Editor {
                     nameof(HologramCamera.manualCalibrationMode),
                     nameof(HologramCamera.calibrationTextAsset),
                     nameof(HologramCamera.manualCalibration),
+                    nameof(HologramCamera.overrideLenticularShader)
                 }
             )
         };
@@ -276,7 +277,7 @@ namespace LookingGlass.Editor {
 
         #region Unity Messages
         private void OnEnable() {
-            cameras = targets.Select(t => (HologramCamera) t).ToArray();
+            cameras = targets.Select(t => (HologramCamera)t).ToArray();
 
             Preview.onToggled += Repaint;
             editorsOpen++;
@@ -307,7 +308,7 @@ namespace LookingGlass.Editor {
         }
 
         protected virtual void OnSceneGUI() {
-            HologramCamera current = (HologramCamera) target;
+            HologramCamera current = (HologramCamera)target;
             try {
                 if (current.enabled && !current.Gizmos.DrawHandles) {
                     if (current.CameraProperties.TransformMode == TransformMode.Volume)
@@ -325,7 +326,7 @@ namespace LookingGlass.Editor {
 
         #region Inspector Preview
         public override bool RequiresConstantRepaint() {
-            HologramCamera current = (HologramCamera) target;
+            HologramCamera current = (HologramCamera)target;
             if (!current.ShowHologramPreview)
                 return false;
             if (!holograms.TryGetValue(current, out HologramEmulation hologram))
@@ -334,7 +335,7 @@ namespace LookingGlass.Editor {
         }
 
         public override bool HasPreviewGUI() {
-            HologramCamera current = (HologramCamera) target;
+            HologramCamera current = (HologramCamera)target;
             if (!current.ShowHologramPreview)
                 return false;
             if (!holograms.TryGetValue(current, out HologramEmulation hologram))
@@ -343,7 +344,7 @@ namespace LookingGlass.Editor {
         }
 
         public override void OnPreviewSettings() {
-            HologramCamera current = (HologramCamera) target;
+            HologramCamera current = (HologramCamera)target;
             if (!current.ShowHologramPreview)
                 return;
             if (!holograms.TryGetValue(current, out HologramEmulation hologram))
@@ -357,7 +358,7 @@ namespace LookingGlass.Editor {
         }
 
         public override string GetInfoString() {
-            HologramCamera current = (HologramCamera) target;
+            HologramCamera current = (HologramCamera)target;
             if (!current.ShowHologramPreview)
                 return null;
             if (!holograms.TryGetValue(current, out HologramEmulation hologram))
@@ -366,7 +367,7 @@ namespace LookingGlass.Editor {
         }
 
         public override void OnPreviewGUI(Rect r, GUIStyle background) {
-            HologramCamera current = (HologramCamera) target;
+            HologramCamera current = (HologramCamera)target;
             if (!current.ShowHologramPreview)
                 return;
             if (!holograms.TryGetValue(current, out HologramEmulation hologram))
@@ -442,7 +443,7 @@ namespace LookingGlass.Editor {
             serializedObject.Update();
 
             //WARNING: This script has the [CanEditMultipleObjects] attribute, yet we directly use base.target instead of base.targets!!
-            HologramCamera hp = (HologramCamera) target;
+            HologramCamera hp = (HologramCamera)target;
 
             if (errorConditions != null) {
                 foreach (HologramCamera h in cameras) {
@@ -474,13 +475,19 @@ namespace LookingGlass.Editor {
             SectionGUILayout.DrawDefaultInspectorWithSections(serializedObject, Groups, CustomGUI);
 
             if (changedTransformMode) {
-                Undo.IncrementCurrentGroup();
                 string undoName = "Set " + nameof(HologramCameraProperties.TransformMode);
+                Undo.IncrementCurrentGroup();
+                Undo.SetCurrentGroupName(undoName);
+
+                EditorUtility.SetDirty(hp.transform);
+                EditorUtility.SetDirty(hp);
                 Undo.RecordObject(hp.transform, undoName);
-                Undo.RecordObject(hp,           undoName);
+                Undo.RecordObject(hp, undoName);
 
                 hp.CameraProperties.TransformMode = nextTransformMode;
                 serializedObject.Update();
+
+                Undo.CollapseUndoOperations(Undo.GetCurrentGroup());
             } else {
                 //Let's make sure to save here, in case we used any non-SerializedProperty Editor GUI:
                 if (serializedObject.ApplyModifiedProperties())
@@ -558,22 +565,77 @@ namespace LookingGlass.Editor {
 
             switch (propertyName) {
                 case nameof(HologramCamera.urpPostProcessing): {
-                        if (RenderPipelineUtil.IsURP) {
-                            Rect r = GUILayoutUtility.GetRect(10, EditorGUIUtility.singleLineHeight, GUILayout.ExpandWidth(true));
-                            //EditorGUI.BeginChangeCheck();
-                            GUIContent label = new("URP Post Processing", property.tooltip);
-                            EditorGUI.BeginProperty(r, label, property);
-                            EditorGUI.PropertyField(r, property, label);
-                            EditorGUI.EndProperty();
+                    if (RenderPipelineUtil.IsURP) {
+                        Rect r = GUILayoutUtility.GetRect(10, EditorGUIUtility.singleLineHeight, GUILayout.ExpandWidth(true));
+                        //EditorGUI.BeginChangeCheck();
+                        GUIContent label = new("URP Post Processing", property.tooltip);
+                        EditorGUI.BeginProperty(r, label, property);
+                        EditorGUI.PropertyField(r, property, label);
+                        EditorGUI.EndProperty();
 
-                            //if (EditorGUI.EndChangeCheck())
-                            //{
-                            //   Debug.Log("urp box changed");
-                            //}
-                        }
-                        //NOTE: We hide this field/show nothing when we're not URP.
-                        return true;
+                        //if (EditorGUI.EndChangeCheck())
+                        //{
+                        //   Debug.Log("urp box changed");
+                        //}
                     }
+                    //NOTE: We hide this field/show nothing when we're not URP.
+                    return true;
+                }
+#if HAS_URP
+                case nameof(HologramCamera.urpScriptableRenderer): {
+                    if (RenderPipelineUtil.IsURP) {
+                        // Check if URP is active
+                        var urpAsset = UniversalRenderPipeline.asset;
+                        if (urpAsset == null) {
+                            EditorGUILayout.HelpBox("URP is not active.", MessageType.Warning);
+                            return true;
+                        }
+
+#if !UNITY_6000_0_OR_NEWER
+                        ScriptableRendererData[] rendererDataList
+                            = (ScriptableRendererData[])typeof(UniversalRenderPipelineAsset).GetField("m_RendererDataList", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(UniversalRenderPipeline.asset);
+#else
+                        // Fetch all renderers from the URP Asset
+                        var rendererDataList = urpAsset.rendererDataList;
+#endif
+                        // If there are no renderers, show a warning
+                        if (rendererDataList == null || rendererDataList.Length == 0) {
+                            EditorGUILayout.HelpBox("No renderers found in the URP Asset.", MessageType.Warning);
+                            return true;
+                        }
+
+                        // Create a dropdown list of renderer names
+                        string[] rendererNames = new string[rendererDataList.Length];
+                        for (int i = 0; i < rendererDataList.Length; i++) {
+                            rendererNames[i] = rendererDataList[i] != null ? rendererDataList[i].name : "Null Renderer";
+                        }
+
+                        // reset urpScriptableRenderer if it's invalid
+                        if (hp.urpScriptableRenderer >= rendererDataList.Length || hp.urpScriptableRenderer < 0) {
+                            hp.urpScriptableRenderer = 0;
+                        }
+
+                        // Display the dropdown for the URP Renderer
+                        EditorGUI.BeginChangeCheck(); // Start checking for changes
+                        int selectedIndex = EditorGUILayout.Popup("URP Renderer", hp.urpScriptableRenderer, rendererNames);
+
+                        // If the user made a change, apply it
+                        if (EditorGUI.EndChangeCheck()) {
+                            // Record the object for undo
+                            Undo.RecordObject(hp, "Change URP Renderer");
+
+                            // Update the index in the script
+                            hp.urpScriptableRenderer = selectedIndex;
+
+                            // Mark the target object as dirty to save changes
+                            EditorUtility.SetDirty(hp);
+                        }
+
+                    }
+                    //NOTE: We hide this field/show nothing when we're not URP.
+                    return true;
+                }
+#endif
                 case nameof(HologramCamera.automaticQuiltPreset):
                     EditorGUI.BeginChangeCheck();
                     EditorGUILayout.PropertyField(property);
@@ -589,34 +651,34 @@ namespace LookingGlass.Editor {
                     }
                     return true;
                 case nameof(HologramCamera.quiltPreset): {
-                        bool useAutomatic = hp.AutomaticQuiltPreset;
-                        bool lockedForRecording = hp.AreQuiltSettingsLockedForRecording;
+                    bool useAutomatic = hp.AutomaticQuiltPreset;
+                    bool lockedForRecording = hp.AreQuiltSettingsLockedForRecording;
 
-                        if (lockedForRecording) {
-                            EditorGUILayout.HelpBox("Quilt settings are being overriden for recording.", MessageType.Info);
-                        }
-
-                        //NOTE: Special case for HologramCamera: The user only needs automatic \
-                        //  (keep quiltPreset in-sync with LKG display/emulated device, OR just use custom settings completely)
-                        //using (new EditorGUI.DisabledScope(useAutomatic)) {
-                        //    EditorGUI.BeginChangeCheck();
-                        //    EditorGUILayout.PropertyField(property, true);
-                        //    if (EditorGUI.EndChangeCheck()) {
-                        //        changedQuiltPreset = true;
-                        //    }
-                        //}
-
-                        //So instead, let's just show this:
-                        if (!useAutomatic) {
-                            SerializedProperty customSettingsProperty = property.FindPropertyRelative(nameof(QuiltPreset.customSettings));
-                            EditorGUI.BeginChangeCheck();
-                            EditorGUILayout.PropertyField(customSettingsProperty, new GUIContent("Custom Quilt Settings", customSettingsProperty.tooltip), true);
-                            if (EditorGUI.EndChangeCheck()) {
-                                changedQuiltPreset = true;
-                            }
-                        }
-                        return true;
+                    if (lockedForRecording) {
+                        EditorGUILayout.HelpBox("Quilt settings are being overriden for recording.", MessageType.Info);
                     }
+
+                    //NOTE: Special case for HologramCamera: The user only needs automatic \
+                    //  (keep quiltPreset in-sync with LKG display/emulated device, OR just use custom settings completely)
+                    //using (new EditorGUI.DisabledScope(useAutomatic)) {
+                    //    EditorGUI.BeginChangeCheck();
+                    //    EditorGUILayout.PropertyField(property, true);
+                    //    if (EditorGUI.EndChangeCheck()) {
+                    //        changedQuiltPreset = true;
+                    //    }
+                    //}
+
+                    //So instead, let's just show this:
+                    if (!useAutomatic) {
+                        SerializedProperty customSettingsProperty = property.FindPropertyRelative(nameof(QuiltPreset.customSettings));
+                        EditorGUI.BeginChangeCheck();
+                        EditorGUILayout.PropertyField(customSettingsProperty, new GUIContent("Custom Quilt Settings", customSettingsProperty.tooltip), true);
+                        if (EditorGUI.EndChangeCheck()) {
+                            changedQuiltPreset = true;
+                        }
+                    }
+                    return true;
+                }
                 case nameof(HologramCamera.targetDisplay):
                     EditorGUI.BeginChangeCheck();
                     EditorGUILayout.PropertyField(property, true);
@@ -671,7 +733,7 @@ namespace LookingGlass.Editor {
                     EditorGUILayout.PropertyField(property);
                     if (EditorGUI.EndChangeCheck()) {
                         changedTransformMode = true;
-                        nextTransformMode = (TransformMode) property.enumValueIndex;
+                        nextTransformMode = (TransformMode)property.enumValueIndex;
                     }
                     return true;
                 case nameof(HologramCamera.focalPlane):
@@ -716,10 +778,10 @@ namespace LookingGlass.Editor {
                     bool disabled = false;
                     switch (propertyName) {
                         case nameof(HologramCamera.calibrationTextAsset):
-                            disabled = modeProperty.enumValueIndex != (int) ManualCalibrationMode.UseCalibrationTextAsset;
+                            disabled = modeProperty.enumValueIndex != (int)ManualCalibrationMode.UseCalibrationTextAsset;
                             break;
                         case nameof(HologramCamera.manualCalibration):
-                            disabled = modeProperty.enumValueIndex != (int) ManualCalibrationMode.UseManualSettings;
+                            disabled = modeProperty.enumValueIndex != (int)ManualCalibrationMode.UseManualSettings;
                             break;
                     }
                     EditorGUI.BeginChangeCheck();

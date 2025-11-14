@@ -64,6 +64,14 @@ namespace LookingGlass {
             }
         }
 
+        public Shader OverrideLenticularShader {
+            get { return hologramCamera.overrideLenticularShader; }
+            set {
+                hologramCamera.overrideLenticularShader = value;
+                MultiViewRendering.CreateLenticularMaterial(ref hologramCamera.lenticularMaterial, value);
+            }
+        }
+
         protected override void OnInitialize() {
             hologramCamera.onQuiltSettingsChanged += () => {
                 OnlyShowView = OnlyShowView;

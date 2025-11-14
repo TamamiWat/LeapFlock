@@ -225,6 +225,7 @@ namespace LookingGlass.Blocks {
             string GetErrorPrefix() => "There was an error uploading.\n\n";
             bool printedExceptionText = false;
             bool hasWarnings = false;
+            int hologramId = -1;
             UnityWebRequest request = null;
             try {
                 if (string.IsNullOrWhiteSpace(args.title))
@@ -274,7 +275,7 @@ namespace LookingGlass.Blocks {
                             //TODO: Handle exception from 404 error invalid session, """{"error":"Invalid session"}"""
                             //Is there a way to check if our session is valid first, rather than this API saying we're logged in?
                             uploadInfo = await getURLRequest.SendAsync<S3Upload>(NetworkErrorBehaviour.Exception, 0);
-                            args.imageUrl = uploadInfo.url;
+                            args.imageUrl = uploadInfo.url + "/" + uploadInfo.key;
                         } catch (Exception e) {
                             printedExceptionText = true;
                             printResult(LogType.Error, GetErrorPrefix() + "An error occurred while trying to get the AWS S3 upload URL!\n\n" + e.GetType().Name + ": " + e.Message);
@@ -286,7 +287,7 @@ namespace LookingGlass.Blocks {
                         getURLRequest.FullyDispose();
                     }
                 }
-                Debug.Log("Retrieved upload URL!\n" + uploadInfo.url + "\n");
+                Debug.Log("Retrieved upload URL!\n" + uploadInfo.preSignedUrl + "\n");
                 updateProgressText("Reading File...");
 
                 //NOTE: We need .NET Standard 2.1+ for File.ReadAllBytesAsync() unfortunately, so we do this instead:
@@ -300,7 +301,7 @@ namespace LookingGlass.Blocks {
                 updateProgressText("Uploading...");
 
                 //NOTE: We want no timeout for uploading files. They could be quite large
-                request = LookingGlassWebRequests.CreateRequestToUploadFile(uploadInfo.url, fileBytes);
+                request = LookingGlassWebRequests.CreateRequestToUploadFile(uploadInfo.preSignedUrl, fileBytes);
                 Task uploadTask = request.SendAsync(NetworkErrorBehaviour.Exception, 0);
                 uploadRequestSetter(request);
 
@@ -324,8 +325,8 @@ namespace LookingGlass.Blocks {
                     await uploadTask;
                 } catch (Exception e) {
                     printedExceptionText = true;
-                    printResult(LogType.Error, GetErrorPrefix() + "An error occurred while trying to upload to " + uploadInfo.url + "!\n\n" + e.GetType().Name + ": " + e.Message);
-                    Debug.LogError("An error occurred while trying to upload to " + uploadInfo.url + "!\naccessToken = " + AccessToken);
+                    printResult(LogType.Error, GetErrorPrefix() + "An error occurred while trying to upload to " + uploadInfo.preSignedUrl + "!\n\n" + e.GetType().Name + ": " + e.Message);
+                    Debug.LogError("An error occurred while trying to upload to " + uploadInfo.preSignedUrl + "!\naccessToken = " + AccessToken);
                     Debug.LogException(e);
                     throw;
                 }
@@ -335,6 +336,7 @@ namespace LookingGlass.Blocks {
                 try {
                     setArgs(args);
                     HologramData data = await LookingGlassWebRequests.SendRequestToCreateQuiltHologram(args);
+                    hologramId = data.id;
                     setResult(data);
                 } catch (Exception e) {
                     printedExceptionText = true;
@@ -345,7 +347,7 @@ namespace LookingGlass.Blocks {
                 }
                 updateProgressText("DONE!");
                 if (!hasWarnings)
-                    printResult(LogType.Log, "Your hologram has been successfully uploaded and can be viewed here:");
+                    printResult(LogType.Log, "Your hologram has been successfully uploaded and can be viewed here:\n" + LookingGlassWebRequests.GetViewURL(LookingGlassUser.Username, hologramId));
                 Debug.Log("DONE!");
             } catch (Exception e) {
                 if (!printedExceptionText) {

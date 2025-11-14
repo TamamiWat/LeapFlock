@@ -1,4 +1,5 @@
-﻿using System;
+﻿using LookingGlass.Toolkit;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -36,6 +37,15 @@ namespace LookingGlass {
         }
 
         /// <summary>
+        /// Gets the window's rect.
+        /// </summary>
+        public ScreenRect GetRect() {
+            ScreenRect result = new ScreenRect();
+            OSWindowUtil.GetWindowRect(handle, out result);
+            return result;
+        }
+
+        /// <summary>
         /// <para>Attempts to set the window's position on the screen in screen pixel coordinates, where the top-left is (0, 0), +x is right, and +y is down.</para>
         /// <para>NOTE: This will NOT have any effect on fullscreened windows, except for moving them between different screens.</para>
         /// </summary>
@@ -45,6 +55,10 @@ namespace LookingGlass {
         /// <param name="height">The desired height of the window in pixels.</param>
         public void SetPosition(int x, int y, int width, int height) {
             OSWindowUtil.SetWindowPos(handle, IntPtr.Zero, x, y, width, height, 0);
+        }
+
+        public void SetBorderlessWindow(int x, int y, int width, int height) {
+            OSWindowUtil.SetBorderlessWindow(handle, x, y, width, height);
         }
 
         /// <summary>

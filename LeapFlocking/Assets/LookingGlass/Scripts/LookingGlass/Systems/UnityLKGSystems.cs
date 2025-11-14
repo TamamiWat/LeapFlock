@@ -8,7 +8,7 @@ using UnityEditor;
 
 namespace LookingGlass {
     /// <summary>
-    /// Represents the central entry point for our editor-and-playmode systems to initialize in a specific order.
+    /// Represents the central entry point for LKG systems that require being active in both edit mode and playmode.
     /// </summary>
 #if UNITY_EDITOR
     [InitializeOnLoad]

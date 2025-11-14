@@ -1,0 +1,43 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 893b14816ad9a054283d91bfa9886cfa, type: 3}
+  m_Name: 1113
+  m_EditorClassIdentifier: 
+  m_MaxObjectNum: 300
+  m_Scale: 0.04
+  m_CohesionNeighborRadius: 0.25
+  m_AlignmentNeighborRadius: 0.2
+  m_SeparationNeighborRadius: 0.05
+  m_AttractRange: 0.6
+  m_AvoidRange: 0.6
+  m_MaxSpeed: 1.56
+  m_MaxSteerForce: 3.21
+  m_MinSpeed: 0.038
+  m_CohesionWeight: 0.6
+  m_AlignmentWeight: 0.3
+  m_SeparationWeight: 1
+  m_AttractWeight: 0
+  m_AvoidWeight: 10
+  m_AvoidFrameWeight: 1
+  m_CohesionAngle: 2.5
+  m_AligmentAngle: 2.5
+  m_SeparationAngle: 2.5
+  m_FrameCenter: {x: 0, y: 0, z: 0.2}
+  m_FrameSize: {x: 0.5, y: 0.5, z: 0.3}
+  m_FrameRadius: 0.5
+  m_hueMin: 0.491
+  m_hueMax: 1
+  m_satMin: 0.503
+  m_satMax: 0.676
+  m_valMin: 0.497
+  m_valMax: 0.769
+  BoidsCS: {fileID: 7200000, guid: abfd22e58d0212542903718ff5873908, type: 3}

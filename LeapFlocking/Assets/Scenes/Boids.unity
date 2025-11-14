@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 0}
-  m_IndirectSpecularColor: {r: 0.44657844, g: 0.49641222, b: 0.57481676, a: 1}
+  m_IndirectSpecularColor: {r: 0.44657898, g: 0.4964133, b: 0.5748178, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -1012,54 +1012,11 @@ MonoBehaviour:
   material: {fileID: 2100000, guid: fb96d5453648141129557bc5f032d5fe, type: 2}
   leapmotion: {fileID: 1413516214}
   distanceThreshold: 10
---- !u!1 &1413516214
+--- !u!1 &1413516214 stripped
 GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
+  m_CorrespondingSourceObject: {fileID: 4161617580408465835, guid: cfa4f0f609cf1dd4a94dec56b9bf54a8, type: 3}
+  m_PrefabInstance: {fileID: 1254017854470844646}
   m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1413516216}
-  - component: {fileID: 1413516215}
-  m_Layer: 0
-  m_Name: LeapMotionManager
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1413516215
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1413516214}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b68c2e0d555784595bef8904df2197e2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  provider: {fileID: 1031025923}
-  prefab: {fileID: 991378677190308139, guid: 79e922e8d36254cde92bd093a27dd66d, type: 3}
-  offset: {x: 0, y: -3.5, z: 5}
-  scale: {x: 35, y: 30, z: 35}
---- !u!4 &1413516216
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1413516214}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1857480568
 GameObject:
   m_ObjectHideFlags: 0
@@ -1248,15 +1205,16 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 114865344359803568, guid: 3019d4eebe2593e428d7b9ccb096ceda, type: 3}
       propertyPath: lkgDisplay.calibration.rawJson
-      value: "{\n  \"DPI\": {\n    \"value\": 324.0\n  },\n  \"center\": {\n    \"value\":
-        0.90079257464393647\n  },\n  \"configVersion\": \"1.0\",\n  \"flipImageX\":
-        {\n    \"value\": 0\n  },\n  \"flipImageY\": {\n    \"value\": 0\n  },\n 
-        \"flipSubp\": {\n    \"value\": 0.0\n  },\n  \"fringe\": {\n    \"value\":
-        0.0\n  },\n  \"invView\": {\n    \"value\": 1\n  },\n  \"pitch\": {\n   
-        \"value\": 52.57568134088546\n  },\n  \"screenH\": {\n    \"value\": 2048.0\n 
-        },\n  \"screenW\": {\n    \"value\": 1536.0\n  },\n  \"serial\": \"LKG-PORT-03438\",\n 
-        \"slope\": {\n    \"value\": -7.1313026787561515\n  },\n  \"verticalAngle\":
-        {\n    \"value\": 0\n  },\n  \"viewCone\": {\n    \"value\": 40.0\n  }\n}"
+      value: "{\r\n  \"DPI\": {\r\n    \"value\": 324.0\r\n  },\r\n  \"center\":
+        {\r\n    \"value\": 0.90079259872436523\r\n  },\r\n  \"configVersion\": \"3.0\",\r\n 
+        \"flipImageX\": {\r\n    \"value\": 0.0\r\n  },\r\n  \"flipImageY\": {\r\n   
+        \"value\": 0.0\r\n  },\r\n  \"flipSubp\": {\r\n    \"value\": 0.0\r\n  },\r\n 
+        \"fringe\": {\r\n    \"value\": 0.0\r\n  },\r\n  \"invView\": {\r\n    \"value\":
+        1.0\r\n  },\r\n  \"pitch\": {\r\n    \"value\": 52.575679779052734\r\n  },\r\n 
+        \"screenH\": {\r\n    \"value\": 2048.0\r\n  },\r\n  \"screenW\": {\r\n   
+        \"value\": 1536.0\r\n  },\r\n  \"serial\": \"LKG-PORT-03438\",\r\n  \"slope\":
+        {\r\n    \"value\": -7.1313028335571289\r\n  },\r\n  \"verticalAngle\": {\r\n   
+        \"value\": 0.0\r\n  },\r\n  \"viewCone\": {\r\n    \"value\": 40.0\r\n  }\r\n}"
       objectReference: {fileID: 0}
     - target: {fileID: 114865344359803568, guid: 3019d4eebe2593e428d7b9ccb096ceda, type: 3}
       propertyPath: lkgDisplay.calibration.screenH
@@ -1296,7 +1254,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 114865344359803568, guid: 3019d4eebe2593e428d7b9ccb096ceda, type: 3}
       propertyPath: lkgDisplay.calibration.configVersion
-      value: 1.0
+      value: 3.0
       objectReference: {fileID: 0}
     - target: {fileID: 114865344359803568, guid: 3019d4eebe2593e428d7b9ccb096ceda, type: 3}
       propertyPath: lkgDisplay.defaultQuilt.renderAspect
@@ -1304,11 +1262,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 114865344359803568, guid: 3019d4eebe2593e428d7b9ccb096ceda, type: 3}
       propertyPath: lkgDisplay.hardwareInfo.windowCoordX
-      value: -1536
+      value: 1920
       objectReference: {fileID: 0}
     - target: {fileID: 114865344359803568, guid: 3019d4eebe2593e428d7b9ccb096ceda, type: 3}
       propertyPath: lkgDisplay.hardwareInfo.windowCoordY
-      value: -98
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 114865344359803568, guid: 3019d4eebe2593e428d7b9ccb096ceda, type: 3}
       propertyPath: quiltPreset.customSettings.tileCount
@@ -1358,6 +1316,67 @@ PrefabInstance:
       insertIndex: -1
       addedObject: {fileID: 114777225}
   m_SourcePrefab: {fileID: 100100000, guid: 3019d4eebe2593e428d7b9ccb096ceda, type: 3}
+--- !u!1001 &1254017854470844646
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 1455882037314285283, guid: cfa4f0f609cf1dd4a94dec56b9bf54a8, type: 3}
+      propertyPath: provider
+      value: 
+      objectReference: {fileID: 1031025923}
+    - target: {fileID: 4161617580408465835, guid: cfa4f0f609cf1dd4a94dec56b9bf54a8, type: 3}
+      propertyPath: m_Name
+      value: LeapMotionManager
+      objectReference: {fileID: 0}
+    - target: {fileID: 5431249552471345532, guid: cfa4f0f609cf1dd4a94dec56b9bf54a8, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5431249552471345532, guid: cfa4f0f609cf1dd4a94dec56b9bf54a8, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5431249552471345532, guid: cfa4f0f609cf1dd4a94dec56b9bf54a8, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5431249552471345532, guid: cfa4f0f609cf1dd4a94dec56b9bf54a8, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 5431249552471345532, guid: cfa4f0f609cf1dd4a94dec56b9bf54a8, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5431249552471345532, guid: cfa4f0f609cf1dd4a94dec56b9bf54a8, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5431249552471345532, guid: cfa4f0f609cf1dd4a94dec56b9bf54a8, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5431249552471345532, guid: cfa4f0f609cf1dd4a94dec56b9bf54a8, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5431249552471345532, guid: cfa4f0f609cf1dd4a94dec56b9bf54a8, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5431249552471345532, guid: cfa4f0f609cf1dd4a94dec56b9bf54a8, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: cfa4f0f609cf1dd4a94dec56b9bf54a8, type: 3}
 --- !u!1001 &4484653895641830817
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1425,7 +1444,7 @@ SceneRoots:
   m_Roots:
   - {fileID: 944540415}
   - {fileID: 1031025922}
-  - {fileID: 1413516216}
+  - {fileID: 1254017854470844646}
   - {fileID: 1857480570}
   - {fileID: 4484653895641830817}
   - {fileID: 1144269760}

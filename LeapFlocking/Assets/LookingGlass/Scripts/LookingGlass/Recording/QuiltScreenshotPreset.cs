@@ -9,6 +9,8 @@ namespace LookingGlass {
         LookingGlassPortrait,
         LookingGlass16Landscape,
         LookingGlass16Portrait,
+        LookingGlass27Landscape,
+        LookingGlass27Portrait,
         LookingGlass32Landscape,
         LookingGlass32Portrait,
         LookingGlass65,

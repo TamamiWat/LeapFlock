@@ -1,0 +1,462 @@
+#pragma kernel SteerForceCalculator      //Steer Force
+#pragma kernel MotionCalculator  //Velocity, Position
+#define SIMULATION_BLOCK_SIZE 256 //Size of thread group's thread
+
+#include "CustomFunction.cginc"
+
+struct BoidData
+{
+	float3 velocity;
+	float3 position;
+    float4 color;
+    float3 scale;
+};
+
+struct ForceData
+{
+    float3 separation;
+    float3 aligment;
+    float3 cohesion;
+    float3 attraction;
+    float3 avoidance;
+};
+
+/*
+**Buffer Definition
+*/
+//Boids Data Buffer
+StructuredBuffer<BoidData>   _BoidDataBufferRead;
+RWStructuredBuffer<BoidData> _BoidDataBufferWrite;
+//Boids Steer Force Buffer
+StructuredBuffer<float3>     _BoidForceBufferRead;
+RWStructuredBuffer<float3>   _BoidForceBufferWrite;
+
+StructuredBuffer<ForceData>   _BoidForceDataBufferRead;
+RWStructuredBuffer<ForceData> _BoidForceDataBufferWrite;
+
+/**
+***From CPU
+**/
+int _MaxBoidObjectNum; 
+
+float _DeltaTime;      //Elapsed time from previous frame
+
+//Distance from other objects
+float _SeparateNeighborhoodRadius;  //Cohesion
+float _AlignmentNeighborhoodRadius; //Alignment
+float _CohesionNeighborhoodRadius;  //Separate
+
+float _MaxSpeed;        //Max Speed
+float _MaxSteerForce;   //Max Steer Force
+float _MinSpeed; //Min Speed
+
+//Weights
+float _SeparationWeight;  //Cohesion
+float _AlignmentWeight; //Alignment
+float _CohesionWeight;  //Separate
+float  _AvoidFrameWeight; //Weight for avoiding frame
+
+//Angle with other object
+float _CohesionAngle; //Cohesion
+float _AlignmentAngle; //Alignment
+float _SeparationAngle; //Separate
+
+float4 _FrameCenter;      //center position of frame
+float4 _FrameSize;        //frame size
+
+float _FrameRadius; //Sphere Frame Radius
+
+float _AttractAngleRange;
+float _AttractRange;
+float _AttractForceWeight;
+float _AvoidRange;
+float _AvoidForceWeight;
+
+//HSV
+float _hueMin;
+float _hueMax;
+float _satMin;
+float _satMax;
+float _valMin;
+float _valMax;
+
+
+
+//User Position
+bool _userDrag;
+bool _userInOut;
+float3 _TapPos;
+float3 _DragPos;
+
+/**
+***Functions
+**/
+
+inline float RadianToDegree(float rad)
+{
+    float degree = rad * 180 / 3.14;
+    return degree;
+}
+
+
+//limit vector size
+float3 limit(float3 vec, float max)
+{
+    float length = sqrt(dot(vec, vec)); //norm : size of vector
+    return (length > max && length > 0) ? vec.xyz * (max / length) : vec.xyz;
+}
+
+float3 limitVelocity(float3 vec, float max, float min)
+{
+    float length = sqrt(dot(vec, vec));//norm : size of vector
+    if(length < min)
+    {
+        vec = vec.xyz * (min / length);
+    }
+    else if(length > max)
+    {
+        vec = vec.xyz * (max / length);
+    }
+
+    return vec;
+}
+
+float3 limitBoundry(float3 pos)
+{
+
+    float3 fromCenter = pos - _FrameCenter.xyz;
+    float  dist       = length(fromCenter);
+
+    if (dist > _FrameRadius)
+    {
+        float  over = dist - _FrameRadius;
+        float3 dir  = fromCenter / max(dist, 1e-5); 
+
+        return -dir * over;
+    }
+
+    return 0;
+}
+
+
+float3 calcForce(float3 inForce, float weight, float3 selfVelocity)
+{
+    float3 outForce = normalize(inForce) * _MaxSpeed;
+    outForce = outForce - selfVelocity;
+    outForce = limit(outForce, _MaxSteerForce);
+    outForce *= weight;
+    return outForce;
+	
+}
+
+float3 calcCoulombForce(float3 direction, float weight, float distance, float3 selfVelocity)
+{
+    float3 outForce = weight * direction / (distance * distance + 0.00001);
+    outForce = limit(outForce, _MaxSteerForce);
+    outForce *= weight;
+    return outForce;
+}
+
+float calcHue(float3 sep, float3 ali, float3 coh)
+{
+    float hueRange = _hueMax - _hueMin;
+    float section = hueRange / 3.0;
+    float s = length(sep);
+    float a = length(ali);
+    float c = length(coh);
+    float f = max(max(s, a), c);
+    float hue = _hueMin;
+
+    if(f == s) 
+    {
+        hue +=  (1 / s)*section + 0*section;
+    }
+    else if(f == a)
+    {
+        hue +=  (1 / a)*section + 1*section;
+    }else
+    {
+        hue +=  (1 / c)*section + 2*section;
+    }
+    return hue;
+}
+
+//shared memory
+groupshared BoidData boid_data[SIMULATION_BLOCK_SIZE];
+
+/*
+**SteerForceCalculator
+*/
+[numthreads(SIMULATION_BLOCK_SIZE, 1, 1)]
+void SteerForceCalculator
+(
+	uint3 id : SV_DispatchThreadID, //Unique ID for the entire thread
+	uint3 Gid : SV_GroupID,           
+	uint3 GTid : SV_GroupThreadID,    
+	uint  GIndex : SV_GroupIndex      //GroupThreadID in one dimension
+)
+{
+	const unsigned int P_ID = id.x; //self ID
+    bool isValid = (P_ID < (uint)_MaxBoidObjectNum);
+
+    float3 self_Position = 0;
+    float3 self_Velocity = 0;
+
+	if (isValid)
+    {
+        self_Position = _BoidDataBufferRead[P_ID].position;
+        self_Velocity = _BoidDataBufferRead[P_ID].velocity;
+    }
+	float3 force = float3(0, 0, 0); //init steer force
+	
+    //counts
+    int sepCount = 0; //separation
+    int aliCount = 0; //alignment
+    int cohCount = 0; //cohesion
+
+    //force result
+    float3 sepDirSum = float3(0, 0, 0);//separation
+    float3 aliVelSum = float3(0, 0, 0);//alignment
+    float3 cohPosSum = float3(0, 0, 0);//cohesion
+
+	
+	[loop]
+	for (uint N_block_ID = 0; N_block_ID < (uint)_MaxBoidObjectNum;
+									N_block_ID += SIMULATION_BLOCK_SIZE)
+	{
+        uint boidIndex = N_block_ID + GIndex;
+
+        if (boidIndex < (uint)_MaxBoidObjectNum)
+        {
+            boid_data[GIndex] = _BoidDataBufferRead[boidIndex];
+        }
+        else
+        {
+            boid_data[GIndex].position = 0;
+            boid_data[GIndex].velocity = 0;
+        }
+
+        //Block execution all threds in a group 
+        //until all threads in a group reach this call 
+        //after sompleting all group shared access
+        GroupMemoryBarrierWithGroupSync();
+
+        uint validCount = min(
+            (uint)SIMULATION_BLOCK_SIZE,
+            (uint)_MaxBoidObjectNum - N_block_ID
+        );
+
+		//calculation with other objects
+		for (int N_other_ID = 0; N_other_ID < validCount; N_other_ID++)
+		{
+            float3 other_position = boid_data[N_other_ID].position; //other object position
+            float3 other_velocity = boid_data[N_other_ID].velocity; //other object velocity
+
+            float3 diff = self_Position - other_position;
+            float distance = length(diff);
+            float angle = acos(dot(normalize(self_Velocity), normalize(diff)));
+
+			//Separation
+            if (distance > 0.0 && distance < _SeparateNeighborhoodRadius && angle < _SeparationAngle)
+            {
+                float3 direction = self_Position - other_position;
+                direction /= distance; //Reduce the impact of distant objects
+                sepDirSum += direction;
+                sepCount++;
+            }
+
+			//Alignment
+            if (distance > 0.0 && distance < _AlignmentNeighborhoodRadius && angle < _AlignmentAngle)
+            {
+                aliVelSum += other_velocity;
+                aliCount++;
+            }
+
+			//Cohesion
+            if (distance > 0.0 && distance < _CohesionNeighborhoodRadius && angle < _CohesionAngle)
+            {
+                cohPosSum += other_position;
+                cohCount++;
+            }	
+
+		}
+		GroupMemoryBarrierWithGroupSync();
+	}
+
+    if (!isValid)
+        return;
+
+	//Separation
+	float3 sepForce = (float3)0.0;
+	if (sepCount > 0)
+	{
+		sepForce = sepDirSum;
+        sepForce = calcForce(sepForce, _CohesionWeight, self_Velocity);
+    }
+	
+
+	//Alignment
+	float3 aliForce = (float3)0.0;
+	if (aliCount > 0)
+	{
+		aliForce = aliVelSum / (float)aliCount;     // Find the average of the speeds of the nearest individuals.
+        aliForce = calcForce(aliForce, _AlignmentWeight, self_Velocity);
+    }
+	
+
+	//Cohesion
+	float3 cohForce = (float3)0.0;
+	if (cohCount > 0)
+	{
+		cohForce = cohPosSum / (float)cohCount;    // Find the average of the positions of the nearest individuals.
+        cohForce = calcForce(cohForce, _CohesionWeight, self_Velocity);
+    }
+    
+    
+    //Avoidance
+    float3 avoForce = (float3) 0.0;
+    if(_userDrag || _userInOut)
+    {
+        float3 userPos = _userDrag ? _DragPos : _TapPos;
+        float3 toUser = userPos - self_Position;
+        float  distance = length(toUser);
+
+        if (distance > 0.0 && distance < _AvoidRange)
+        {
+            // ユーザーから離れる向き
+            float3 dirFromUser = normalize(self_Position - userPos);
+
+            float3 dirNorm = normalize(toUser);
+            float yaw = atan2(dirNorm.z, dirNorm.x);
+            float length_xy = sqrt(dirNorm.x * dirNorm.x + dirNorm.y * dirNorm.y);
+            float pitch = atan2(dirNorm.z, length_xy);
+
+            float limitRad = 1.0; // 回避範囲の視野角（お好みで調整）
+
+            if (abs(yaw) < limitRad && abs(pitch) < limitRad)
+            {
+                // Coulomb は「ベクトルの向き」に依存するので、
+                // ここでは既に dirFromUser にしておくか、direction を -dirNorm にしてもOK
+                avoForce = calcCoulombForce(dirFromUser, _AvoidForceWeight, distance, self_Velocity);
+            }
+        }
+
+    }
+	
+	//Attraction
+    // float3 attForce = (float3) 0.0;   
+    // if (_userDrag)
+    // {
+    //     float distance = length(_DragPos - self_Position);
+    //     float3 direction = normalize(_DragPos - self_Position);
+    //     float yaw = atan2(direction.z, direction.x);
+    //     float length_xy = sqrt(direction.x * direction.x + direction.y * direction.y);
+    //     float pitch = atan2(direction.z, length_xy);
+        
+    //     float limitRad = 1.0;
+    //     if (distance < _AttractRange && abs(yaw) < limitRad && abs(pitch) < limitRad)
+    //     {
+    //         attForce = direction;
+    //         attForce = calcCoulombForce(direction, _AttractForceWeight, distance, self_Velocity);
+
+    //     }
+    // }
+    _BoidForceDataBufferWrite[P_ID].separation = sepForce;
+    _BoidForceDataBufferWrite[P_ID].aligment = aliForce;
+    _BoidForceDataBufferWrite[P_ID].cohesion = cohForce;
+    _BoidForceDataBufferWrite[P_ID].attraction = 0;
+    _BoidForceDataBufferWrite[P_ID].avoidance = avoForce;
+    
+
+    force = sepForce + aliForce + cohForce + avoForce;// + attForce;
+
+	_BoidForceBufferWrite[P_ID] = force; //update steer force
+}
+
+/*
+**MotionCalculator
+*/
+[numthreads(SIMULATION_BLOCK_SIZE, 1, 1)]
+void MotionCalculator
+(
+	uint3 id : SV_DispatchThreadID 
+)
+{
+	const unsigned int P_ID = id.x;   //get index
+    if (P_ID >= (uint)_MaxBoidObjectNum)
+        return;
+    float hueRange = _hueMax - _hueMin;       
+											           
+	BoidData currentData = _BoidDataBufferWrite[P_ID];   //read current Boids Data
+	float3 force = _BoidForceBufferRead[P_ID]; //read steer force
+    ForceData currentForce = _BoidForceDataBufferRead[P_ID];
+    float3 velocity = currentData.velocity; // current velocity
+
+	// Colour change based on speed orientation.
+    float alpha = clamp(1 - 1 / length(velocity), 0, 1);
+    //float hue = calcHue(currentForce.separation, currentForce.aligment, currentForce.cohesion);
+    float hue = clamp((velocity.x*2 )/ _MaxSpeed, _hueMin, _hueMax);
+    float saturation = clamp( velocity.y / _MaxSpeed, _satMin, _satMax);
+    float value = clamp(velocity.z / _MaxSpeed, _valMin, _valMax);
+    float3 rgb = hsv2rgb(float3(hue, saturation, value));
+    currentData.color = float4(rgb, alpha);
+
+	force += limitBoundry(currentData.position) * _AvoidFrameWeight;
+
+    bool hasUser = false;
+    float3 userPos = 0;
+
+    float dis = length(_DragPos - currentData.position);
+    
+    if (_userDrag)
+    {
+        userPos = _DragPos;
+        hasUser = true;
+    }
+    else if (_userInOut)
+    {
+        userPos = _TapPos;
+        hasUser = true;
+    }
+
+    if (hasUser)
+    {
+        float dis = length(userPos - currentData.position);
+
+        if (dis < _AvoidRange)
+        {
+            // ユーザーから離れる方向
+            float3 dirFromUser = normalize(currentData.position - userPos);
+
+            float forceMultiplier = 1.0 - (dis / _AvoidRange); // 近いほど強く
+            forceMultiplier = max(forceMultiplier, 0.1);
+            forceMultiplier *= 5.0; // 全体スケール（お好みで）
+
+            force += dirFromUser * _MaxSteerForce * forceMultiplier;
+        }
+    }
+
+    currentData.velocity += force * _DeltaTime;
+    currentData.velocity = limitVelocity(currentData.velocity, _MaxSpeed, _MinSpeed);
+    currentData.position += currentData.velocity * _DeltaTime;
+
+    {
+        float3 fromCenter = currentData.position - _FrameCenter.xyz;
+        float  dist       = length(fromCenter);
+
+        if (dist > _FrameRadius)
+        {
+            float3 dir = fromCenter / max(dist, 1e-5);
+
+            currentData.position = _FrameCenter.xyz + dir * _FrameRadius;
+
+            float vn = dot(currentData.velocity, dir);
+            if (vn > 0)
+            {
+                currentData.velocity -= vn * dir;
+            }
+        }
+    }
+
+    _BoidDataBufferWrite[P_ID] = currentData; 
+}

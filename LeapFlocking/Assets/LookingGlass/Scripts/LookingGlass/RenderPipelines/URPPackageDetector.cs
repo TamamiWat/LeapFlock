@@ -133,7 +133,13 @@ namespace LookingGlass {
                             bool setURPAsset = false;
                             if (!foundURP) {
                                 if (!PlayerPrefs.HasKey(AskToUseURPAssetKey)) {
-                                    RenderPipelineAsset existingRPAsset = GraphicsSettings.renderPipelineAsset;
+                                    RenderPipelineAsset existingRPAsset =
+#if UNITY_6000_0_OR_NEWER
+                                        GraphicsSettings.defaultRenderPipeline;
+#else
+                                        GraphicsSettings.renderPipelineAsset;
+#endif
+
                                     string existingRPAssetPath;
                                     if (existingRPAsset == null || string.IsNullOrEmpty(existingRPAssetPath = AssetDatabase.GetAssetPath(existingRPAsset)) || AssetDatabase.AssetPathToGUID(existingRPAssetPath) != URPAssetGUID)
                                         setURPAsset = EditorUtility.DisplayDialog("Use URP Asset?", "Would you also like to use LookingGlass's default URP asset?", "Yes", "No");
@@ -234,7 +240,7 @@ namespace LookingGlass {
                         Progress.Report(progressId, 6, StepCount, "Setting render pipeline");
                         await Task.Delay(250);
 
-                        GraphicsSettings.renderPipelineAsset = AssetDatabase.LoadAssetAtPath<RenderPipelineAsset>(AssetDatabase.GUIDToAssetPath(URPAssetGUID));
+                        GraphicsSettings.defaultRenderPipeline = AssetDatabase.LoadAssetAtPath<RenderPipelineAsset>(AssetDatabase.GUIDToAssetPath(URPAssetGUID));
                         Debug.Log("Set the project's graphics settings to use LookingGlass's URP render pipeline asset!");
                         AssetDatabase.SaveAssets();
 

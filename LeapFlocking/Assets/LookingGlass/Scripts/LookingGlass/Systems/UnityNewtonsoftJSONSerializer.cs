@@ -1,12 +1,13 @@
 ﻿#if HAS_NEWTONSOFT_JSON
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 using UnityEngine;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
-using Newtonsoft.Json.Converters;
 
 using Object = UnityEngine.Object;
 
@@ -135,10 +136,20 @@ namespace LookingGlass {
             string text;
             Formatting formatting = prettyPrint ? Formatting.Indented : Formatting.None;
             settings.Formatting = formatting;
+
+            CreateSerializerIfNeeded(ref lowerLevelSerializer);
             try {
                 //For now, as I am unsure how I want to move forward with looping references, I'll just have it try first -- if it comes up, show an error
                 settings.ReferenceLoopHandling = ReferenceLoopHandling.Error;
-                text = JsonConvert.SerializeObject(obj, settings);
+
+                //text = JsonConvert.SerializeObject(obj, settings);
+                using (StringWriter stringWriter = new())
+                using (JsonTextWriter writer = new(stringWriter)) {
+                    writer.Indentation = 4;
+                    writer.IndentChar = ' ';
+                    lowerLevelSerializer.Serialize(writer, obj);
+                    text = stringWriter.ToString();
+                }
             } catch (JsonSerializationException e) {
                 //and then go to these statements and ignore any looping references. This way, it lets us know if it DOES come across looping references.
                 //Which aren't supported as this code is written currently.

@@ -8,5 +8,6 @@
 [assembly: InternalsVisibleTo("LookingGlass.Editor")]
 [assembly: InternalsVisibleTo("LookingGlass.Editor.Tests")]
 [assembly: InternalsVisibleTo("LookingGlass.Tests")]
+[assembly: InternalsVisibleTo("LookingGlass.Mobile")]
 [assembly: InternalsVisibleTo("Unity.Postprocessing.Runtime")]
 namespace LookingGlass { }

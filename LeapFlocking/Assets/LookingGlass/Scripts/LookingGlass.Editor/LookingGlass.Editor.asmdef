@@ -3,7 +3,8 @@
     "rootNamespace": "",
     "references": [
         "LookingGlass",
-        "FFmpegOut"
+        "FFmpegOut",
+        "Unity.RenderPipelines.Universal.Runtime"
     ],
     "includePlatforms": [
         "Editor"
@@ -14,6 +15,17 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.nuget.newtonsoft-json",
+            "expression": "2.0.0",
+            "define": "HAS_NEWTONSOFT_JSON"
+        },
+        {
+            "name": "com.unity.render-pipelines.universal",
+            "expression": "0",
+            "define": "HAS_URP"
+        }
+    ],
     "noEngineReferences": false
 }

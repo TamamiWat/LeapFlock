@@ -1,4 +1,5 @@
 ﻿// Inspired by Unity Recorder editor
+#if UNITY_EDITOR || !UNITY_IOS
 using System;
 using System.IO;
 using UnityEngine;
@@ -117,6 +118,10 @@ namespace LookingGlass.Editor {
                     EditorGUILayout.HelpBox("You must switch to Manual Mode to manually start recording", MessageType.Warning);
                 else if (!isPlaying)
                     EditorGUILayout.HelpBox("You must enter playmode to start recording more than 1 frame.", MessageType.Warning);
+
+#if UNITY_EDITOR_OSX
+                EditorGUILayout.HelpBox("Note that capture is not supported in iOS build.", MessageType.Warning);
+#endif
                 Color prevColor = GUI.color;
                 Color prevBackgroundColor = GUI.backgroundColor;
                 Color prevContentColor = GUI.contentColor;
@@ -344,3 +349,4 @@ namespace LookingGlass.Editor {
         }
     }
 }
+#endif

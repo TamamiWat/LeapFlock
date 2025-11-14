@@ -4,7 +4,9 @@
     "references": [
         "Unity.InputSystem",
         "LookingGlass",
-        "Unity.Postprocessing.Runtime"
+        "Unity.Postprocessing.Runtime",
+        "NativeFilePicker.Runtime",
+        "NativeFilePicker.Editor"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

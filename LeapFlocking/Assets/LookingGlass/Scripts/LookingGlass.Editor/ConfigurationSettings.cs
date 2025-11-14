@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
 using LookingGlass.Toolkit;
-using LookingGlass.Toolkit;
 
 namespace LookingGlass.Editor {
     [InitializeOnLoad]
@@ -106,7 +105,7 @@ namespace LookingGlass.Editor {
             EditorApplication.update -= CheckIfPromptedYet;
         }
 
-        [MenuItem("LookingGlass/Setup Player Settings", false, 53)]
+        [MenuItem("LookingGlass/Setup Player Settings", priority = 50)]
         private static void Init() {
             ConfigurationSettings window = EditorWindow.GetWindow<ConfigurationSettings>();
             window.Show();

@@ -13,10 +13,10 @@ MonoBehaviour:
   m_Name: Plugin Version
   m_EditorClassIdentifier: 
   version:
-    value: v3.0.5
+    value: v3.2.8
     isValid: 1
     prefix: v
     major: 3
-    minor: 0
-    patch: 5
+    minor: 2
+    patch: 8
     label: 

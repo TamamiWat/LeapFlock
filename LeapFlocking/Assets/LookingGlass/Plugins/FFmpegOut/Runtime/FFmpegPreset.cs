@@ -72,7 +72,7 @@ namespace FFmpegOut {
                 // case FFmpegPreset.H264Lossless420: return "-pix_fmt yuv420p -preset ultrafast -crf 0";
                 // case FFmpegPreset.H264Lossless444: return "-pix_fmt yuv444p -preset ultrafast -crf 0";
                 // case FFmpegPreset.HevcDefault:     return "-c:v libx265 -pix_fmt yuv420p";
-                case FFmpegPreset.HevcNvidia: return "-c:v hevc_nvenc -pix_fmt yuv420p";
+                case FFmpegPreset.HevcNvidia: return "-c:v hevc_nvenc -tag:v hvc1 -pix_fmt yuv420p";
 #endif                        
                 // case FFmpegPreset.ProRes422:       return "-c:v prores_ks -pix_fmt yuv422p10le";
                 // case FFmpegPreset.ProRes4444:      return "-c:v prores_ks -pix_fmt yuva444p10le";

@@ -2,13 +2,17 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using LookingGlass.Toolkit;
 using LookingGlass.Toolkit.Bridge;
 
 #if UNITY_EDITOR
 using UnityEditor;
+using UnityEditor.SceneManagement;
+
 #endif
 
 #if HAS_NEWTONSOFT_JSON
@@ -43,8 +47,11 @@ namespace LookingGlass {
         private static List<Task<bool>> calibrationCalls = new();
 
         private static bool disposed = false;
-        private static bool isTesting = false;
+        private static CoroutineRunner coroutineRunner;
 
+        /// <summary>
+        /// An event that fires off when Looking Glass Bridge has been successfully connected to, and the status of currently-connected Looking Glass displays has been updated/retrieved.
+        /// </summary>
         public static event CalibrationRefreshEvent onReload;
 
         internal static BridgeConnectionHTTP BridgeConnection => bridgeConnection;
@@ -60,11 +67,19 @@ namespace LookingGlass {
         }
 
         /// <summary>
-        /// Gets a copy of the LKG display in the array of connected displays that are found to be currently connected.
+        /// Gets a copy of the LKG display data in the array of  displays that are found to be currently connected.
         /// </summary>
         /// <param name="index">Note that this is an arbitrary index, and should NOT be relied on for persistence.</param>
         public static ToolkitDisplay Get(int index) => new ToolkitDisplay(lkgDisplays[index]);
+
+        /// <summary>
+        /// The number of currently-connected Looking Glass displays.
+        /// </summary>
         public static int LKGDisplayCount => lkgDisplays?.Length ?? 0;
+
+        /// <summary>
+        /// A collection of all the currently-connected Looking Glass displays.
+        /// </summary>
         public static IEnumerable<ToolkitDisplay> LKGDisplays {
             get {
                 if (lkgDisplays != null)
@@ -154,17 +169,23 @@ namespace LookingGlass {
             EditorApplication.playModeStateChanged += OnPlayModeStateChange;
 #endif
 
+            if (Application.isMobilePlatform)
+                return;
+
             _ = Reconnect();
         }
 
         internal static void UninitializeSystem() {
             disposed = true;
             connected = false;
+#if UNITY_EDITOR
+            EditorSceneManager.sceneClosing -= OnEditorSceneClosing;
+            EditorSceneManager.sceneOpened -= OnEditorSceneLoad;
+#endif
             if (bridgeConnection != null) {
                 bridgeConnection.Dispose();
                 bridgeConnection = null;
             }
-            isTesting = false;
         }
 
         private static async Task<bool> ForceReconnect() {
@@ -360,19 +381,12 @@ namespace LookingGlass {
                 }
                 connectTcs.SetResult(true);
 
-                if (!isTesting) {
-                    isTesting = true;
-
-                    CoroutineRunner runner = new GameObject("Coroutines").AddComponent<CoroutineRunner>();
-                    if (Application.isPlaying)
-                        GameObject.DontDestroyOnLoad(runner.gameObject);
-                    runner.gameObject.hideFlags = HideFlags.HideAndDontSave;
-                    runner.StartCoroutine(WaitForEventsCoroutine(() => {
-                        GameObject.DestroyImmediate(runner.gameObject);
-                    }));
-                }
+                RestartEventLoop();
 
                 End:
+                if (!result) {
+                    SetDisplays(new ToolkitDisplay[0]);
+                }
                 return result;
 #endif
             } catch (Exception e) {
@@ -380,6 +394,45 @@ namespace LookingGlass {
                 return false;
             }
         }
+
+        private static bool RestartEventLoop() {
+            if (coroutineRunner != null)
+                return false;
+
+            coroutineRunner = new GameObject("Coroutines").AddComponent<CoroutineRunner>();
+            if (Application.isPlaying) {
+                GameObject.DontDestroyOnLoad(coroutineRunner.gameObject);
+            } else {
+#if UNITY_EDITOR
+                EditorSceneManager.sceneClosing -= OnEditorSceneClosing;
+                EditorSceneManager.sceneClosing += OnEditorSceneClosing;
+                EditorSceneManager.sceneOpened -= OnEditorSceneLoad;
+                EditorSceneManager.sceneOpened += OnEditorSceneLoad;
+#endif
+            }
+            coroutineRunner.gameObject.hideFlags = HideFlags.HideAndDontSave;
+
+            //NOTE: We don't use EditorApplication.update here because it has an unnecessarily MUCH higher update frequency than an [ExecuteAlways] MonoBehaviour.Update() or coroutine
+            coroutineRunner.StartCoroutine(WaitForEventsCoroutine(() => {
+                if (coroutineRunner != null)
+                    GameObject.DestroyImmediate(coroutineRunner.gameObject);
+            }));
+            return true;
+        }
+
+        private static void OnEditorSceneClosing(Scene scene, bool removingScene) {
+            //NOTE: Unity halts our running coroutines on the coroutineRunner in edit mode,
+            //  but does NOT call OnDestroy for us if we use HideFlags.HideAndDontSave!
+            //  So, we need to detect the scene closing, and destroy it ourselves.
+            if (coroutineRunner != null)
+                GameObject.DestroyImmediate(coroutineRunner.gameObject);
+        }
+
+#if UNITY_EDITOR
+        private static void OnEditorSceneLoad(Scene scene, OpenSceneMode mode) {
+            RestartEventLoop();
+        }
+#endif
 
         /// <summary>
         /// Asynchronously queries LKG Bridge for all currently connected LKG displays,
@@ -400,27 +453,60 @@ namespace LookingGlass {
         /// <param name="allowSkip">If the list of connected LKG displays hasn't changed, should we skip applying any changes to the <see cref="LKGDisplaySystem"/> and <see cref="HologramCamera"/>s?</param>
         private static async Task<bool> ReloadCalibrationsTask(bool allowSkip, BridgeLoggingFlags loggingFlags) {
             try {
-                if (!await bridgeConnection.UpdateDevicesAsync(loggingFlags)) {
-                    Debug.LogWarning("Failed to update LKG devices.");
-                    goto End;
+                OverrideLKGDisplay[] overrideDisplays = LKGSettingsSystem.Settings.overrideLKGDisplays;
+                ToolkitDisplay[] nextDisplays = new ToolkitDisplay[0];
+
+#if HAS_NEWTONSOFT_JSON
+                bool useBridge = overrideDisplays == null;
+                if (overrideDisplays != null) {
+                    try {
+                        nextDisplays = new ToolkitDisplay[overrideDisplays.Length];
+                        for (int i = 0; i < overrideDisplays.Length; i++) {
+                            string calibrationJSON = await File.ReadAllTextAsync(overrideDisplays[i].calibration);
+                            nextDisplays[i] = new ToolkitDisplay() {
+                                calibration = Calibration.Parse(calibrationJSON),
+                                defaultQuilt = overrideDisplays[i].defaultQuilt,
+                                hardwareInfo = overrideDisplays[i].hardwareInfo
+                            };
+                        }
+                    } catch (Exception e) {
+                        useBridge = true;
+                        Debug.LogError("An error occurred while parsing override LKG displays. Using LKG Bridge instead...");
+                        Debug.LogException(e);
+                    }
+                } 
+#else
+                bool useBridge = true;
+#endif
+
+                if (useBridge) {
+                    if (!await bridgeConnection.UpdateDevicesAsync(loggingFlags)) {
+                        Debug.LogWarning("Failed to update LKG devices.");
+                        goto End;
+                    }
+
+                    nextDisplays = bridgeConnection.GetLKGDisplays().ToArray();
+                    if (allowSkip && !LKGDisplaysChanged(nextDisplays))
+                        goto End;
                 }
 
-                ToolkitDisplay[] nextDisplays = bridgeConnection.GetLKGDisplays().ToArray();
-                if (allowSkip && !LKGDisplaysChanged(nextDisplays))
-                    goto End;
-                lkgDisplays = nextDisplays;
-
-                HologramCamera.UpdateAllCalibrations();
-#if UNITY_EDITOR
-                EditorPreloadedData.SaveCurrentState();
-#endif
-                onReload?.Invoke();
+                SetDisplays(nextDisplays);
                 return true;
             } catch (Exception e) {
                 Debug.LogException(e);
             }
 End:
             return false;
+        }
+
+        private static void SetDisplays(ToolkitDisplay[] displays) {
+            lkgDisplays = displays;
+
+            HologramCamera.UpdateAllCalibrations();
+#if UNITY_EDITOR
+            EditorPreloadedData.SaveCurrentState();
+#endif
+            onReload?.Invoke();
         }
 
         private static bool LKGDisplaysChanged(ToolkitDisplay[] nextDisplays) {
@@ -448,6 +534,7 @@ End:
                 || !CheckThatAllExist(nextDisplays, lkgDisplays, (lhs, rhs) => lhs.Equals(rhs));
         }
 
+        [ExecuteAlways]
         private class CoroutineRunner : MonoBehaviour { }
 
         /// <summary>
@@ -457,22 +544,23 @@ End:
         /// <param name="seconds">The amount of time in seconds to wait.</param>
         private static IEnumerator WaitFor(float seconds) {
 #if UNITY_EDITOR
-                if (!Application.isPlaying) {
-                    TaskCompletionSource<bool> tcs = new();
-                    Task.Run(() => {
-                        Task.Delay((int) (1000 * seconds)).Wait();
-                        EditorApplication.delayCall += () => {
-                            tcs.SetResult(true);
-                            EditorApplication.QueuePlayerLoopUpdate();
-                        };
-                    });
-                    while (!tcs.Task.IsCompleted)
-                        yield return null;
-                } else {
-#endif
-                    yield return new WaitForSeconds(seconds);
-#if UNITY_EDITOR
+            if (!Application.isPlaying) {
+                TaskCompletionSource<bool> tcs = new();
+                Task.Run(() => {
+                    Task.Delay((int) (1000 * seconds)).Wait();
+                    EditorApplication.delayCall += () => {
+                        tcs.SetResult(true);
+                        EditorApplication.QueuePlayerLoopUpdate();
+                    };
+                });
+                while (!tcs.Task.IsCompleted) {
+                    yield return null;
                 }
+            } else {
+#endif
+                yield return new WaitForSeconds(seconds);
+#if UNITY_EDITOR
+            }
 #endif
         }
 

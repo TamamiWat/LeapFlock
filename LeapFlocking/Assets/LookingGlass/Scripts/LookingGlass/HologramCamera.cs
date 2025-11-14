@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using System.IO;
 using UnityEngine;
 using UnityEngine.Assertions;
+using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using UnityEngine.Serialization;
 using UnityEngine.SceneManagement;
@@ -47,6 +48,7 @@ namespace LookingGlass {
         /// Called when <see cref="All"/> is updated due to OnEnable or OnDisable on any <see cref="HologramCamera"/> component.
         /// </summary>
         public static event Action onListChanged;
+        public static event Action<HologramCamera> onAnyInitialized;
 
         internal static event Action<HologramCamera> onAnyQuiltSettingsChanged;
         internal static event Action<HologramCamera> onAnyCalibrationReloaded;
@@ -202,8 +204,11 @@ namespace LookingGlass {
 
         [Tooltip("Should post-processing be enabled after rendering the quilt?\n\n" +
             "This only effects URP.")]
-        [SerializeField] internal bool urpPostProcessing;
-
+        [SerializeField] internal bool urpPostProcessing = true;
+//#if UNITY_6000_0_OR_NEWER
+        [Tooltip("urp renderer\n\n" + "This only effects URP.")]
+        [SerializeField] internal int urpScriptableRenderer = 0;
+//#endif
         [Tooltip("The realtime quilt rendered by this Holoplay capture.")]
         [SerializeField] internal RenderTexture quiltTexture;
 
@@ -249,7 +254,7 @@ namespace LookingGlass {
         [NonSerialized] private bool hadPreview2D = false; //Used for detecting changes in the editor
         [NonSerialized] private bool wasSavingQuilt;
 
-        private Material lenticularMaterial;
+        internal Material lenticularMaterial;
 
         //NOTE: This is because Unity does NOT support null values for inline serialization, so lkgDisplay will never be null as long as Unity is serializing it.
         [SerializeField] internal bool isEmulatingDevice;
@@ -263,11 +268,13 @@ namespace LookingGlass {
         private bool frameRendered2DPreview;
         private bool debugInfo;
 
-        private RenderTextureFormat quiltTextureOriginalFormatUsed;
+        private GraphicsFormat quiltTextureOriginalFormatUsed;
         private RenderTexture preview2DRT;
         private RenderTexture singleViewRT;
         internal List<Func<bool>> renderBlackIfAny = new();
+#if UNITY_EDITOR || !UNITY_IOS
         private QuiltCapture currentCapture;
+#endif
 
         private List<Component> hideFlagsObjects = new List<Component>();
 
@@ -281,11 +288,6 @@ namespace LookingGlass {
         public event Action onQuiltChanged;
         public event Action onQuiltSettingsChanged;
         public event Action onCalibrationChanged;
-        public event Action onAspectChanged;
-
-        //REVIEW: [CRT-4039] Do we just have too many events? It *is* getting a little hectic/hard to maintain that they're getting called all at the right times, and what about on start/destroy, etc.?
-        //  This was from HologramRenderSettings. We should either implement this, or completely get rid of it!
-        //public event Action onQuiltAspectChanged;
 
         public bool Preview2D {
             get { return preview2D; }
@@ -338,7 +340,7 @@ namespace LookingGlass {
             set {
                 targetDisplay = value;
                 if (finalScreenCamera != null)
-                    finalScreenCamera.targetDisplay = (int) targetDisplay;
+                    finalScreenCamera.targetDisplay = (int)targetDisplay;
                 onTargetDisplayChanged?.Invoke();
             }
         }
@@ -349,6 +351,7 @@ namespace LookingGlass {
             get { return targetLKG; }
             set {
                 targetLKG = value;
+                UseDefaultFilterMode();
                 UpdateCalibration();
             }
         }
@@ -365,16 +368,16 @@ namespace LookingGlass {
             get { return emulatedDevice; }
             set {
                 emulatedDevice = value;
+                UseDefaultFilterMode();
                 UseAutomaticQuiltSettings();
                 UpdateCalibration();
-                OnQuiltSettingsChanged();
             }
         }
 
         /// <summary>
         /// The type of Looking Glass display that is being emulated or targeted (currently identified based on its Calibration serial field).
         /// </summary>
-        public LKGDeviceType DeviceType => isEmulatingDevice ? emulatedDevice : lkgDisplay.calibration.GetDeviceType();
+        public LKGDeviceType DeviceType => isEmulatingDevice ? emulatedDevice : lkgDisplay.calibration.GetDeviceType(); // TODO why we are not using Calibration.GetDeviceType()?
 
         /// <summary>
         /// <para>
@@ -421,7 +424,7 @@ namespace LookingGlass {
         public Material LenticularMaterial {
             get {
                 if (lenticularMaterial == null)
-                    CreateLenticularMaterial();
+                    MultiViewRendering.CreateLenticularMaterial(ref lenticularMaterial, Debugging.OverrideLenticularShader);
                 return lenticularMaterial;
             }
         }
@@ -438,17 +441,7 @@ namespace LookingGlass {
             }
         }
 
-        public bool Initialized {
-            get { return initialized; }
-            set {
-                initialized = value;
-                if (initialized) {
-                    initializationTcs.TrySetResult(true);
-                } else {
-                    initializationTcs = new();
-                }
-            }
-        }
+        public bool Initialized => initialized;
         public Task WaitForInitialization() => initializationTcs.Task;
 
         //How the cameras work:
@@ -498,6 +491,9 @@ namespace LookingGlass {
         /// </summary>
         public Calibration Calibration {
             get {
+                // TODO confirm this with Carlos
+                if (Debugging.ManualCalibrationMode != ManualCalibrationMode.None)
+                    return manualCalibration;
                 if (isEmulatingDevice)
                     return emulatedDeviceTemplate.calibration;
                 return lkgDisplay.calibration;
@@ -572,8 +568,12 @@ namespace LookingGlass {
             set { depthQuiltTexture = value; }
         }
 
-        public bool AreQuiltSettingsLockedForRecording => currentCapture != null;
-
+        public bool AreQuiltSettingsLockedForRecording =>
+#if UNITY_EDITOR || !UNITY_IOS
+            currentCapture != null;
+#else
+            false;
+#endif
         public bool IsSameDevice(HologramCamera other) {
             if (other == null)
                 return false;
@@ -614,7 +614,8 @@ namespace LookingGlass {
 
         private void OnDisable() {
             initializationStarted = false;
-            Initialized = false;
+            initialized = false;
+            initializationTcs = new();
             debugging.onShowAllObjectsChanged -= SetAllObjectHideFlags;
 
             UnregisterFromList(this);
@@ -741,28 +742,47 @@ namespace LookingGlass {
         }
 
         private async Task InitializeAfterCalibrationAsync() {
+            bool loadAsync =
+#if !UNITY_IOS && !UNITY_ANDROID
+                true;
+#else
+                false;
+#endif
+
             try {
-                if (LKGDisplaySystem.IsLoading)
-                    await LKGDisplaySystem.WaitForCalibrations();
-                if (this == null || !isActiveAndEnabled)
-                    return;
+                if (loadAsync) {
+                    if (LKGDisplaySystem.IsLoading)
+                        await LKGDisplaySystem.WaitForCalibrations();
+                    if (this == null || !isActiveAndEnabled)
+                        return;
+                }
 
                 SetupQuilt();
 
                 if (lenticularMaterial == null)
-                    CreateLenticularMaterial();
+                    MultiViewRendering.CreateLenticularMaterial(ref lenticularMaterial, Debugging.OverrideLenticularShader);
 
                 SetupAllCameras();
                 PrepareFieldsBeforeRendering();
                 SetupRenderer();
                 Preview2D = preview2D;
 
-                SetupScreenResolution();
+                string persistentDataJSONPath = UserStorage.PersistentDataJSONPath;
 
+                if (loadAsync)
+                    SetupScreenResolution();
+#if UNITY_IOS && !UNITY_EDITOR
+                else if (File.Exists(persistentDataJSONPath))
+                    LoadManualCalibration();
+#endif
                 debugging.onShowAllObjectsChanged -= SetAllObjectHideFlags;
                 debugging.onShowAllObjectsChanged += SetAllObjectHideFlags;
 
-                Initialized = true;
+                initialized = true;
+                renderStack.RenderToQuilt(this);
+
+                onAnyInitialized?.Invoke(this);
+                initializationTcs.TrySetResult(true);
             } catch (Exception e) {
                 Debug.LogError("Failed to fully initialize " + this + "!");
                 Debug.LogException(e);
@@ -807,10 +827,31 @@ namespace LookingGlass {
 #endif
         }
 
+        /// <summary>
+        /// Loads calibration from a "visual.json" file from the persistent data path.
+        /// </summary>
+        public Calibration LoadManualCalibration() {
+            string persistentDataJSONPath = UserStorage.PersistentDataJSONPath;
+            string json = File.ReadAllText(persistentDataJSONPath);
+
+#if HAS_NEWTONSOFT_JSON
+            Calibration hardcodedCalibration = LookingGlass.Toolkit.Calibration.Parse(json);
+            Debugging.ManualCalibration = hardcodedCalibration;
+            Debugging.ManualCalibrationMode = ManualCalibrationMode.UseManualSettings;
+
+            if (AutomaticQuiltPreset) {
+                LKGDeviceType deviceType = hardcodedCalibration.GetDeviceType();
+                Debug.Log("Detected " + nameof(AutomaticQuiltPreset) + " set to true while loading visual.json (deviceType = " + deviceType + ")");
+                UseAutomaticQuiltSettings();
+                Debug.Log("Updated quilt preset and quilt settings for iOS based on automatic:\n" + JsonUtility.ToJson(QuiltPreset, true));
+            }
+#endif
+            return Debugging.ManualCalibration;
+        }
+
         private void SetupRenderer() {
             MultiViewRenderer.Next = this;
             renderer = finalScreenCamera.gameObject.AddComponent<MultiViewRenderer>();
-            renderStack.RenderToQuilt(this);
         }
 
         internal void InitSections() {
@@ -827,9 +868,20 @@ namespace LookingGlass {
 #endif
         }
 
+        internal void OnCalibrationChanged() {
+            onAnyCalibrationReloaded?.Invoke(this);
+            onCalibrationChanged?.Invoke();
+#if UNITY_EDITOR
+            GameViewExtensions.UpdateUserGameViews();
+            EditorApplication.delayCall += () => GameViewExtensions.RepaintAllViewsImmediately();
+#endif
+        }
+
         private void ValidateCanChangeQuiltSettings() {
+#if UNITY_EDITOR || !UNITY_IOS
             if (AreQuiltSettingsLockedForRecording)
                 throw new InvalidOperationException("You cannot set quilt settings during recording! Please use " + nameof(QuiltCapture) + "'s override settings instead.");
+#endif
         }
 
         internal static HologramCamera GetLastForDevice(string serial) {
@@ -847,22 +899,29 @@ namespace LookingGlass {
             return true;
         }
 
+        public void UseDefaultFilterMode() {
+            renderStack.FilterMode = QuiltFilterMode.PointVirtualPixelAA;
+        }
+
         public void UseAutomaticQuiltSettings() => SetQuiltPreset(true, new QuiltPreset(DeviceType));
         public void UseCustomQuiltSettings(QuiltSettings settings) => SetQuiltPreset(false, new QuiltPreset(settings));
         public void SetQuiltPreset(bool automaticQuiltPreset, QuiltPreset quiltPreset) {
             ValidateCanChangeQuiltSettings();
+
             this.automaticQuiltPreset = automaticQuiltPreset;
             this.quiltPreset = quiltPreset;
 
             if (this.automaticQuiltPreset)
+#if UNITY_IOS
+            {
+                this.quiltPreset.UseDefaultFrom(Calibration.GetDeviceType());
+            }
+#else
                 this.quiltPreset.UseDefaultFrom(DeviceType);
+#endif
 
             SetupQuilt();
             OnQuiltSettingsChanged();
-        }
-
-        private void CreateLenticularMaterial() {
-            lenticularMaterial = new Material(Util.FindShader("LookingGlass/Lenticular"));
         }
 
         //NOTE: Only the finalScreenCamera is set with enabled = true, because it's the only camera here meant to write to the screen.
@@ -872,7 +931,9 @@ namespace LookingGlass {
             singleViewCamera = new GameObject(SingleViewCameraName).AddComponent<Camera>();
             singleViewCamera.transform.SetParent(transform, false);
             singleViewCamera.enabled = false;
+#if !HAS_URP
             singleViewCamera.stereoTargetEye = StereoTargetEyeMask.None; //NOTE: This is needed for better XR support
+#endif
             SetHideFlagsOnObject(singleViewCamera);
 
             if (UsePostProcessing?.Invoke(this) ?? false) {
@@ -900,8 +961,10 @@ namespace LookingGlass {
             finalScreenCamera.allowMSAA = false;
             finalScreenCamera.cullingMask = 0;
             finalScreenCamera.clearFlags = CameraClearFlags.Nothing;
-            finalScreenCamera.targetDisplay = (int) targetDisplay;
+            finalScreenCamera.targetDisplay = (int)targetDisplay;
+#if !HAS_URP
             finalScreenCamera.stereoTargetEye = StereoTargetEyeMask.None;
+#endif
             SetHideFlagsOnObject(finalScreenCamera);
         }
 
@@ -1011,11 +1074,17 @@ namespace LookingGlass {
                 singleViewCamera.projectionMatrix = centerProjMatrix;
 
 #if HAS_URP
-                if (RenderPipelineUtil.IsURP)
+                if (RenderPipelineUtil.IsURP) {
                     singleViewCamera.GetUniversalAdditionalCameraData().renderPostProcessing = urpPostProcessing;
-#endif 
+
+//#if UNITY_6000_0_OR_NEWER
+                    singleViewCamera.GetUniversalAdditionalCameraData().SetRenderer(urpScriptableRenderer);
+//#endif
+                }
+
+#endif
+                }
             }
-        }
 
         public void UpdateLenticularMaterial() => MultiViewRendering.SetLenticularMaterialSettings(this, LenticularMaterial);
 
@@ -1051,6 +1120,7 @@ namespace LookingGlass {
                 rect.top = lkgDisplay.hardwareInfo.windowCoordY;
                 rect.right = rect.left + lkgDisplay.calibration.screenW;
                 rect.bottom = rect.top + lkgDisplay.calibration.screenH;
+                //Debug.Log("rect of lkg display " + rect);
             } else {
                 if (emulatedDeviceTemplate != null) {
                     //REVIEW: [CRT-4039] Does this work as (and when) intended?
@@ -1075,6 +1145,7 @@ namespace LookingGlass {
 #if HAS_NEWTONSOFT_JSON
                     JObject root = JObject.Parse(file.text);
                     c = Calibration.Parse(root);
+                    manualCalibration = c;
 #else
                     return false;
 #endif
@@ -1086,10 +1157,14 @@ namespace LookingGlass {
                     return false;
             }
 
-            if (isEmulatingDevice)
+            if (isEmulatingDevice) {
+                //NOTE: The manual calibration might technically be a different type of device,
+                //  so let's force the emulatedDevice to match our provided manual calibration:
+                emulatedDevice = c.GetDeviceType();
                 emulatedDeviceTemplate.calibration = c;
-            else
+            } else {
                 lkgDisplay.calibration = c;
+            }
             return true;
         }
 
@@ -1104,8 +1179,9 @@ namespace LookingGlass {
                 string prevTargetName = targetLKG;
                 bool foundCalibration = false;
                 lkgDisplay = null; //WARNING: Because this is serialized, Unity WILL initialize it with a new() instance with zeroed out values.
-                isEmulatingDevice = true;
 
+                isEmulatingDevice = true;
+                // below is not working on mobile yet
                 foreach (ToolkitDisplay display in LKGDisplaySystem.LKGDisplays) {
                     if (targetLKG == display.calibration.serial) {
                         lkgDisplay = display;
@@ -1166,15 +1242,14 @@ namespace LookingGlass {
                     lenticularRegion = GetFullScreenRect();
 
                 UpdateLenticularMaterial();
-
-                onAnyCalibrationReloaded?.Invoke(this);
-                onCalibrationChanged?.Invoke();
+                OnCalibrationChanged();
             } catch (Exception e) {
                 Debug.LogError("Error occurred during " + (Application.isPlaying ? "Playmode" : "Editmode"));
                 Debug.LogException(e);
             }
         }
 
+#if UNITY_EDITOR || !UNITY_IOS
         internal void LockRenderSettingsForRecording(QuiltCapture capture) {
             Assert.IsNotNull(capture);
             Assert.IsNull(currentCapture);
@@ -1185,11 +1260,13 @@ namespace LookingGlass {
             Assert.AreEqual(currentCapture, capture);
             currentCapture = null;
         }
-
-        private RenderTextureFormat GetQuiltFormat() {
+#endif
+        private GraphicsFormat GetQuiltFormat() {
             if (allowHDR)
-                return RenderTextureFormat.DefaultHDR;
-            return RenderTextureFormat.Default;
+                return GraphicsFormat.R16G16B16A16_SFloat;
+            if (QualitySettings.activeColorSpace == ColorSpace.Linear)
+                return GraphicsFormat.R8G8B8A8_SRGB;
+            return GraphicsFormat.R8G8B8A8_UNorm;
         }
 
         private bool NeedsQuiltResetup() => NeedsQuiltResetup(QuiltSettings);
@@ -1229,8 +1306,9 @@ namespace LookingGlass {
             }
 
             quiltTextureOriginalFormatUsed = GetQuiltFormat();
+            int depthBits = (RenderPipelineUtil.IsURP) ? 32 : 0; //TODO: Why does URP in newer versions (like in Unity 6) suddenly require depth bits now? Aren't we NOT rendering directly from the camera to the quilt? (We're rendering directly to single-view textures, then blitting copies into the quilt view-by-view...)
             if (quiltSettings.quiltWidth >= QuiltSettings.MinSize && quiltSettings.quiltHeight >= QuiltSettings.MinSize) {
-                quilt = new RenderTexture(quiltSettings.quiltWidth, quiltSettings.quiltHeight, 0, quiltTextureOriginalFormatUsed) {
+                quilt = new RenderTexture(quiltSettings.quiltWidth, quiltSettings.quiltHeight, depthBits, quiltTextureOriginalFormatUsed) {
                     filterMode = FilterMode.Point,
                     hideFlags = (useQuiltAsset) ? HideFlags.None : HideFlags.DontSave
                 };
@@ -1252,8 +1330,8 @@ namespace LookingGlass {
 
             //Pass some stuff globally for post-processing
             Shader.SetGlobalVector("hp_quiltViewSize", new Vector4(
-                (quiltSettings.quiltWidth >= QuiltSettings.MinSize) ? (float) quiltSettings.TileWidth / quiltSettings.quiltWidth : 0,
-                (quiltSettings.quiltHeight >= QuiltSettings.MinSize) ? (float) quiltSettings.TileHeight / quiltSettings.quiltHeight : 0,
+                (quiltSettings.quiltWidth >= QuiltSettings.MinSize) ? (float)quiltSettings.TileWidth / quiltSettings.quiltWidth : 0,
+                (quiltSettings.quiltHeight >= QuiltSettings.MinSize) ? (float)quiltSettings.TileHeight / quiltSettings.quiltHeight : 0,
                 quiltSettings.TileWidth,
                 quiltSettings.TileHeight
             ));

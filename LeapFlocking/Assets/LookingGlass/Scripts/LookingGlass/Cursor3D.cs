@@ -91,6 +91,9 @@ namespace LookingGlass {
                 return;
             }
 
+            if (!hologramCamera.Initialized)
+                return;
+
             if (frameRendered)
                 return; // don't update if frame's been rendered already
 
@@ -99,7 +102,7 @@ namespace LookingGlass {
             int h = hologramCamera.QuiltSettings.TileHeight;
 
             RenderTexture colorRT = RenderTexture.GetTemporary(
-                w, h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear, 1);
+                w, h, 32, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear, 1);
             colorRT.filterMode = FilterMode.Point; // important to avoid some weird edge cases
             colorRT.antiAliasing = 1;
             RenderTexture depthNormalsRT = RenderTexture.GetTemporary(

@@ -7,10 +7,11 @@ namespace LookingGlass {
     public static class UnityBuildWindowUtil {
         private static Regex mainDisplayRegex;
         private static Regex secondaryDisplayRegex;
+        private static Regex gameViewRegex;
 
         public static IntPtr GetMainWindowPtr() {
             if (mainDisplayRegex == null)
-                mainDisplayRegex = new Regex(Application.productName);
+                mainDisplayRegex = new Regex("^" + Application.productName + "$");
 
             foreach (WindowsOSWindow window in WindowsOSWindow.GetAll()) {
                 string title = window.GetTitle();
@@ -27,6 +28,17 @@ namespace LookingGlass {
             foreach (WindowsOSWindow window in WindowsOSWindow.GetAll()) {
                 string title = window.GetTitle();
                 if (secondaryDisplayRegex.IsMatch(title))
+                    yield return window.Handle;
+            }
+        }
+
+        public static IEnumerable<IntPtr> GetGameViewWindowPtrs() {
+            if (gameViewRegex == null)
+                gameViewRegex = new Regex("LookingGlass Game View");
+
+            foreach (WindowsOSWindow window in WindowsOSWindow.GetAll()) {
+                string title = window.GetTitle();
+                if (gameViewRegex.IsMatch(title))
                     yield return window.Handle;
             }
         }
