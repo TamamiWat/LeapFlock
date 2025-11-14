@@ -87,8 +87,13 @@ Material:
     m_Floats:
     - _AlphaClip: 0
     - _AlphaToMask: 0
+    - _BandFreq: 20
+    - _BandScroll: 1
     - _Blend: 0
     - _BlendModePreserveSpecular: 1
+    - _BottomHue: 0.469
+    - _BottomSat: 0.9
+    - _BottomVal: 1.4
     - _Brightness: 3.64
     - _BumpScale: 1
     - _ClearCoatMask: 0
@@ -100,16 +105,20 @@ Material:
     - _DstBlend: 0
     - _DstBlendAlpha: 0
     - _EnvironmentReflections: 1
-    - _FresnelPower: 8
+    - _FresnelPower: 4.2
     - _GlossMapScale: 0
     - _Glossiness: 0
     - _GlossyReflections: 0
+    - _GradHeight: 1
     - _GradHueMax: 0.503
     - _GradHueMin: 0
     - _GradSat: 1
     - _GradValue: 1.2
+    - _HueCenter: 0.65
     - _HueMax: 0.826
     - _HueMin: 0.467
+    - _HueShiftSpeed: 0.015
+    - _HueWidth: 0.233
     - _IridescentStrength: 5
     - _Metallic: 0
     - _OcclusionStrength: 1
@@ -126,6 +135,9 @@ Material:
     - _SrcBlend: 1
     - _SrcBlendAlpha: 1
     - _Surface: 0
+    - _TopHue: 1
+    - _TopSat: 0.8
+    - _TopVal: 1.2
     - _Value: 0.871
     - _WorkflowMode: 1
     - _ZWrite: 1

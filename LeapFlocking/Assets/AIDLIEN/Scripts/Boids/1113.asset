@@ -14,20 +14,20 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_MaxObjectNum: 300
   m_Scale: 0.04
-  m_CohesionNeighborRadius: 0.25
-  m_AlignmentNeighborRadius: 0.2
-  m_SeparationNeighborRadius: 0.05
+  m_CohesionNeighborRadius: 0
+  m_AlignmentNeighborRadius: 3.41
+  m_SeparationNeighborRadius: 0.23
   m_AttractRange: 0.6
   m_AvoidRange: 0.6
-  m_MaxSpeed: 1.56
-  m_MaxSteerForce: 3.21
+  m_MaxSpeed: 0.26
+  m_MaxSteerForce: 0.43
   m_MinSpeed: 0.038
-  m_CohesionWeight: 0.6
-  m_AlignmentWeight: 0.3
+  m_CohesionWeight: 0.3
+  m_AlignmentWeight: 1.2
   m_SeparationWeight: 1
   m_AttractWeight: 0
-  m_AvoidWeight: 10
-  m_AvoidFrameWeight: 1
+  m_AvoidWeight: 2
+  m_AvoidFrameWeight: 6.9
   m_CohesionAngle: 2.5
   m_AligmentAngle: 2.5
   m_SeparationAngle: 2.5

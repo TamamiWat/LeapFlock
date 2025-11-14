@@ -453,7 +453,8 @@ void MotionCalculator
             float vn = dot(currentData.velocity, dir);
             if (vn > 0)
             {
-                currentData.velocity -= vn * dir;
+                float wallDamp = 0.5; 
+                currentData.velocity -= vn * dir * wallDamp;
             }
         }
     }
